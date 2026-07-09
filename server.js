@@ -309,7 +309,7 @@ app.post('/api/add-product-auto', async (req, res) => {
     }
 });
 
-// Find Chromium executable path
+// Helper: Dynamically find Chromium executable path across Nixpacks/Ubuntu
 function getChromePath() {
     const paths = [
         "/nix/var/nix/profiles/default/bin/chromium",
