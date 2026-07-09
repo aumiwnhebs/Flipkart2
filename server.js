@@ -35,13 +35,13 @@ const upload = multer({ storage: storage });
 // Serve static assets from root folder
 app.use(express.static(__dirname));
 
-// Serve Root Home Route (Fixes 502 Bad Gateway)
+// Default home route
 app.get('/', (req, res) => {
     const indexPath = path.join(__dirname, 'index.html');
     if (fs.existsSync(indexPath)) {
         res.sendFile(indexPath);
     } else {
-        res.send('Server is running successfully!');
+        res.send('Server is running!');
     }
 });
 
@@ -324,7 +324,7 @@ function getChromePath() {
     return 'chromium';
 }
 
-// Scraper Endpoint with VPS Flags
+// Scraper Endpoint
 app.post('/api/fetch-product-details', (req, res) => {
     const { url } = req.body;
     if (!url) {
@@ -351,7 +351,6 @@ app.post('/api/fetch-product-details', (req, res) => {
 
         const html = stdout;
 
-        // Extract Name
         let name = '';
         const titleMatch = html.match(/<title>([^<]+)<\/title>/i);
         if (titleMatch) {
@@ -363,14 +362,12 @@ app.post('/api/fetch-product-details', (req, res) => {
         }
         if (!name) name = "Auto Ingested Product";
 
-        // Extract MRP
         let mrp = 0;
         const lineThroughMatch = html.match(/style="[^"]*text-decoration(?:-line)?:\\s*line-through[^"]*"[^>]*>\\s*(?:₹|&#8377;)?\\s*([^<]+)<\/div>/i);
         if (lineThroughMatch) {
             mrp = parseInt(lineThroughMatch[1].replace(/[^0-9]/g, ''), 10) || 0;
         }
 
-        // Extract High-Res Images
         let images = [];
         const ldJsonRegex = /<script[^>]*type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/gi;
         let ldMatch;
@@ -399,4 +396,3 @@ app.post('/api/fetch-product-details', (req, res) => {
 app.listen(PORT, '0.0.0.0', () => {
     console.log(`Express server running on port ${PORT}...`);
 });
-
