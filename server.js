@@ -313,12 +313,12 @@ const { execFile } = require('child_process');
 // Find Google Chrome executable path
 function getChromePath() {
     const paths = [
-        // Linux paths
+        "/nix/var/nix/profiles/default/bin/chromium",
+        "/root/.nix-profile/bin/chromium",
         "/usr/bin/google-chrome",
         "/usr/bin/google-chrome-stable",
         "/usr/bin/chromium-browser",
         "/usr/bin/chromium",
-        // Windows paths
         "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
         "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
         path.join(process.env.LOCALAPPDATA || '', 'Google\\Chrome\\Application\\chrome.exe')
@@ -326,7 +326,7 @@ function getChromePath() {
     for (const p of paths) {
         if (fs.existsSync(p)) return p;
     }
-    return null;
+    return 'chromium';
 }
 
 // API Endpoint: Auto-add product directly from pasted Flipkart URL link
