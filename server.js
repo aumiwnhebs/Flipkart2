@@ -307,9 +307,6 @@ app.post('/api/add-product-auto', async (req, res) => {
     }
 });
 
-
-const { execFile } = require('child_process');
-
 // Find Google Chrome executable path
 // Find Chromium executable path in Linux / Railway
 // Find Chromium executable path
