@@ -1,3 +1,106 @@
+const axios = require('axios');
+
+// API Endpoint: Step 1 - Fetch and scrape Flipkart product details without Heavy Chrome
+app.post('/api/fetch-product-details', async (req, res) => {
+    const { url } = req.body;
+    if (!url) {
+        return res.status(400).json({ error: 'URL is required.' });
+    }
+
+    try {
+        console.log(`Step 1: Fetching HTML for URL using Axios: ${url}`);
+        
+        // Mobile User-Agent triggers cleaner HTML & bypasses headless bot checks
+        const response = await axios.get(url, {
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                'Accept-Language': 'en-US,en;q=0.5'
+            },
+            timeout: 10000
+        });
+
+        const html = response.data;
+
+        // 1. Parse Product Name/Title
+        let name = '';
+        const titleMatch = html.match(/<title>([^<]+)<\/title>/i);
+        if (titleMatch) {
+            name = titleMatch[1].trim()
+                .replace(/\s*Online\s+at\s+Best\s+Price.*$/i, '')
+                .replace(/\s*-\s*Buy\s+.*$/i, '')
+                .replace(/\s*-\s*Portronics\s*:.*$/i, '')
+                .replace(/\s*:\s*Flipkart\.com.*$/i, '')
+                .trim();
+        }
+        if (!name) name = "Auto Ingested Product";
+
+        // 2. Parse MRP (Original Price)
+        let mrp = 0;
+        const lineThroughMatch = html.match(new RegExp('style="[^"]*text-decoration-line:\\s*line-through[^"]*"[^>]*>\\s*(?:₹|&#8377;)?\\s*([^<]+)</div>', 'i')) ||
+                                 html.match(new RegExp('style="[^"]*text-decoration:\\s*line-through[^"]*"[^>]*>\\s*(?:₹|&#8377;)?\\s*([^<]+)</div>', 'i'));
+        if (lineThroughMatch) {
+            mrp = parseInt(lineThroughMatch[1].replace(/[^0-9]/g, ''), 10) || 0;
+        }
+        
+        if (mrp === 0) {
+            const mrpMatches = html.match(new RegExp('class="[^"]*(?:y31Yq2|M5aNdF)[^"]*">\\s*(?:₹|&#8377;)?\\s*([^<]+)', 'i'));
+            if (mrpMatches) {
+                mrp = parseInt(mrpMatches[1].replace(/[^0-9]/g, ''), 10) || 0;
+            }
+        }
+
+        // 3. Parse Specifications
+        const specs = [];
+        const keysToExtract = ["Internal Storage", "RAM", "Primary Camera", "Secondary Camera", "Battery Capacity", "Processor Brand", "Processor Type", "Display Size"];
+        keysToExtract.forEach(key => {
+            const pattern = new RegExp('<div[^>]*>\\s*' + key.replace(/ /g, '\\s*') + '\\s*</div>\\s*<div[^>]*>\\s*([^<]+)\\s*</div>', 'i');
+            const match = html.match(pattern);
+            if (match) {
+                specs.push(`${key}: ${match[1].trim()}`);
+            }
+        });
+
+        // 4. Parse High-Res Images
+        let images = [];
+        const ldJsonRegex = /<script[^>]*type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/gi;
+        let ldMatch;
+        while ((ldMatch = ldJsonRegex.exec(html)) !== null) {
+            try {
+                const data = JSON.parse(ldMatch[1].trim());
+                const items = Array.isArray(data) ? data : [data];
+                for (const item of items) {
+                    if (item['@type'] === 'Product' && item.image) {
+                        const imgList = Array.isArray(item.image) ? item.image : [item.image];
+                        imgList.forEach(img => {
+                            const highRes = img.replace('/image/1500/1500/', '/image/832/832/')
+                                               .replace('/image/300/300/', '/image/832/832/')
+                                               .replace('rukmini1.flixcart.com', 'rukminim2.flixcart.com')
+                                               .split('?')[0];
+                            if (!images.includes(highRes) && images.length < 8) {
+                                images.push(highRes);
+                            }
+                        });
+                    }
+                }
+            } catch (e) {}
+        }
+
+        console.log(`Successfully fetched: "${name}", MRP: ₹${mrp}`);
+        
+        res.json({
+            success: true,
+            name,
+            mrp,
+            specs,
+            images
+        });
+
+    } catch (error) {
+        console.error('Fetch error:', error.message);
+        res.status(500).json({ error: 'Failed to retrieve page contents. Flipkart blocked request.' });
+    }
+});
 const express = require('express');
 const cors = require('cors');
 const multer = require('multer');
