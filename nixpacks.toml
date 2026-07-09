@@ -1,6 +1,6 @@
-[providers]
-node = {}
-
 [phases.setup]
-nixPkgs = ["chromium"]
+nixPkgs = ["...", "chromium"]
+
+[env]
+PUPPETEER_SKIP_CHROMIUM_DOWNLOAD = "false"
 
