@@ -396,6 +396,7 @@ app.post('/api/fetch-product-details', (req, res) => {
     });
 });
 
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
     console.log(`Express server running on port ${PORT}...`);
 });
+
