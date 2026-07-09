@@ -1,8 +1,6 @@
 [phases.setup]
-cmds = [
-  "apt-get update",
-  "apt-get install -y chromium"
-]
+nixPkgs = ["nodejs-18_x", "chromium"]
 
-[phases.build]
-cmds = ["npm install"]
+[env]
+PUPPETEER_SKIP_CHROMIUM_DOWNLOAD = "true"
+
