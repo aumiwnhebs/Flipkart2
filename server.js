@@ -7,8 +7,6 @@ const { execFile } = require('child_process');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-
-
 // Enable CORS and body parsing
 app.use(cors());
 app.use(express.json());
@@ -314,9 +312,11 @@ const { execFile } = require('child_process');
 
 // Find Google Chrome executable path
 // Find Chromium executable path in Linux / Railway
+// Find Chromium executable path
 function getChromePath() {
     const paths = [
         "/nix/var/nix/profiles/default/bin/chromium",
+        "/root/.nix-profile/bin/chromium",
         "/usr/bin/chromium",
         "/usr/bin/chromium-browser",
         "/usr/bin/google-chrome-stable"
@@ -327,14 +327,15 @@ function getChromePath() {
     return 'chromium';
 }
 
-// Scraper Endpoint with VPS flags
+// Scraper with VPS Flags (--no-sandbox, --disable-gpu)
 app.post('/api/fetch-product-details', (req, res) => {
     const { url } = req.body;
-    if (!url) return res.status(400).json({ error: 'URL is required.' });
+    if (!url) {
+        return res.status(400).json({ error: 'URL is required.' });
+    }
 
     const chromePath = getChromePath();
 
-    // Flags: --no-sandbox, --disable-gpu
     const args = [
         '--headless',
         '--no-sandbox',
@@ -345,16 +346,15 @@ app.post('/api/fetch-product-details', (req, res) => {
         url
     ];
 
-    // Increased maxBuffer to 10MB
     execFile(chromePath, args, { maxBuffer: 1024 * 1024 * 10 }, (error, stdout, stderr) => {
         if (error) {
             console.error('Scraper Error:', error);
-            return res.status(500).json({ error: 'Failed to retrieve page content.' });
+            return res.status(500).json({ error: 'Failed to retrieve page contents.' });
         }
 
         const html = stdout;
 
-        // Title Extraction
+        // Extract Name
         let name = '';
         const titleMatch = html.match(/<title>([^<]+)<\/title>/i);
         if (titleMatch) {
@@ -364,15 +364,16 @@ app.post('/api/fetch-product-details', (req, res) => {
                 .replace(/\s*:\s*Flipkart\.com.*$/i, '')
                 .trim();
         }
+        if (!name) name = "Auto Ingested Product";
 
-        // MRP Extraction
+        // Extract MRP
         let mrp = 0;
         const lineThroughMatch = html.match(/style="[^"]*text-decoration(?:-line)?:\\s*line-through[^"]*"[^>]*>\\s*(?:₹|&#8377;)?\\s*([^<]+)<\/div>/i);
         if (lineThroughMatch) {
             mrp = parseInt(lineThroughMatch[1].replace(/[^0-9]/g, ''), 10) || 0;
         }
 
-        // Images Extraction
+        // Extract Images
         let images = [];
         const ldJsonRegex = /<script[^>]*type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/gi;
         let ldMatch;
@@ -385,7 +386,9 @@ app.post('/api/fetch-product-details', (req, res) => {
                         const imgList = Array.isArray(item.image) ? item.image : [item.image];
                         imgList.forEach(img => {
                             const highRes = img.replace('/image/1500/1500/', '/image/832/832/').split('?')[0];
-                            if (!images.includes(highRes) && images.length < 8) images.push(highRes);
+                            if (!images.includes(highRes) && images.length < 8) {
+                                images.push(highRes);
+                            }
                         });
                     }
                 }
@@ -396,13 +399,6 @@ app.post('/api/fetch-product-details', (req, res) => {
     });
 });
 
-
-// API Endpoint: Auto-add product directly from pasted Flipkart URL link
-
-// API Endpoint: Step 1 - Fetch and scrape Flipkart product details via Headless Chrome with virtual time budget
-// API Endpoint: Step 1 - Fetch and scrape Flipkart product details via Headless Chrome with virtual time budget
-// API Endpoint: Step 1 - Fetch and scrape Flipkart product details via Headless Chrome with virtual time budget
-// API Endpoint: Step 1 - Fetch and scrape Flipkart product details via Headless Chrome with virtual time budget
 app.post('/api/fetch-product-details', (req, res) => {
     const { url } = req.body;
     if (!url) {
