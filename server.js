@@ -349,7 +349,17 @@ app.post('/api/fetch-product-details', (req, res) => {
     console.log(`Step 1: Scraping details for URL: ${url}`);
     
     // Execute Chrome with virtual time budget (10s) to allow lazy-loaded elements to load
-    execFile(chromePath, ['--headless', '--disable-gpu', '--no-sandbox', '--disable-setuid-sandbox', '--virtual-time-budget=10000', '--user-agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36"', '--dump-dom', url], { maxBuffer: 1024 * 1024 * 15 }, (error, stdout, stderr) => {
+    execFile(chromePath, [
+    '--headless=new', 
+    '--disable-gpu', 
+    '--no-sandbox', 
+    '--disable-setuid-sandbox', 
+    '--disable-dev-shm-usage',
+    '--virtual-time-budget=20000', 
+    '--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36', 
+    '--dump-dom', 
+    url
+], { maxBuffer: 1024 * 1024 * 20 }, (error, stdout, stderr) => {
         if (error) {
             console.error('Chrome execution error:', error);
             return res.status(500).json({ error: 'Failed to retrieve page contents.' });
