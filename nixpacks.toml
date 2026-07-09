@@ -2,5 +2,5 @@
 node = {}
 
 [phases.setup]
-nixPkgs = ["chromium", "glibc"]
+nixPkgs = ["chromium"]
 
