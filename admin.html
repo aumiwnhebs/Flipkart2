@@ -1,0 +1,1139 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flipkart Clone - Admin Dashboard</title>
+    <link rel="icon" href="https://static-assets-web.flixcart.com/www/promos/new/20150528-140547-favicon-retina.ico" type="image/png" />
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+    <style>
+        :root {
+            --primary: #2874f0;
+            --primary-dark: #1254e7;
+            --success: #388e3c;
+            --danger: #d32f2f;
+            --bg-body: #f8fafc;
+            --bg-card: #ffffff;
+            --text-dark: #1e293b;
+            --text-light: #64748b;
+            --border-color: #e2e8f0;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Outfit', sans-serif;
+            background-color: var(--bg-body);
+            color: var(--text-dark);
+            line-height: 1.5;
+            padding: 24px;
+        }
+
+        header {
+            max-width: 1200px;
+            margin: 0 auto 30px auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 2px solid var(--border-color);
+            padding-bottom: 16px;
+        }
+
+        .logo-wrap {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .logo-wrap img {
+            height: 36px;
+        }
+
+        .logo-wrap h1 {
+            font-size: 24px;
+            font-weight: 700;
+            color: var(--primary);
+        }
+
+        .logo-wrap span {
+            font-size: 11px;
+            background: #ffe500;
+            color: #000;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            margin-top: 4px;
+        }
+
+        .stats-bar {
+            display: flex;
+            gap: 16px;
+        }
+
+        .stat-badge {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            padding: 10px 18px;
+            border-radius: 10px;
+            font-size: 14px;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+        }
+
+        .stat-badge i {
+            color: var(--primary);
+        }
+
+        .dashboard-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: 1fr 1.8fr;
+            gap: 30px;
+        }
+
+        @media (max-width: 992px) {
+            .dashboard-container {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .card {
+            background: var(--bg-card);
+            border-radius: 16px;
+            border: 1px solid var(--border-color);
+            padding: 24px;
+            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05), 0 2px 4px -1px rgba(0,0,0,0.03);
+            margin-bottom: 30px;
+            transition: all 0.3s ease;
+        }
+
+        .card:hover {
+            box-shadow: 0 10px 15px -3px rgba(0,0,0,0.08);
+        }
+
+        .card-title {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 12px;
+        }
+
+        .card-title i {
+            color: var(--primary);
+        }
+
+        .form-group {
+            margin-bottom: 18px;
+        }
+
+        .form-group label {
+            display: block;
+            font-size: 14px;
+            font-weight: 500;
+            margin-bottom: 6px;
+            color: var(--text-dark);
+        }
+
+        .form-control {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            font-size: 14px;
+            font-family: inherit;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .form-control:focus {
+            border-color: var(--primary);
+        }
+
+        .form-row-2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            font-family: inherit;
+            cursor: pointer;
+            border: none;
+            transition: all 0.2s;
+            width: 100%;
+        }
+
+        .btn-primary {
+            background: var(--primary);
+            color: #fff;
+        }
+
+        .btn-primary:hover {
+            background: var(--primary-dark);
+        }
+
+        .btn-danger {
+            background: var(--danger);
+            color: #fff;
+            padding: 8px 12px;
+            font-size: 12px;
+            border-radius: 6px;
+            width: auto;
+        }
+
+        .btn-danger:hover {
+            opacity: 0.9;
+        }
+
+        /* Specs dynamic point builder styling */
+        .specs-builder-wrap {
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 12px;
+            background: #f8fafc;
+        }
+
+        .spec-item-row {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 8px;
+            align-items: center;
+        }
+
+        .btn-add-spec {
+            background: #eff6ff;
+            color: var(--primary);
+            border: 1px dashed var(--primary);
+            border-radius: 6px;
+            padding: 8px;
+            font-size: 13px;
+            cursor: pointer;
+            width: 100%;
+            font-weight: 500;
+            text-align: center;
+            transition: 0.2s;
+        }
+
+        .btn-add-spec:hover {
+            background: #dbeafe;
+        }
+
+        .spec-remove-btn {
+            background: none;
+            border: none;
+            color: var(--text-light);
+            cursor: pointer;
+            font-size: 16px;
+            padding: 4px;
+            transition: color 0.2s;
+        }
+
+        .spec-remove-btn:hover {
+            color: var(--danger);
+        }
+
+        /* Products Listing style */
+        .products-grid-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            max-height: 700px;
+            overflow-y: auto;
+            padding-right: 4px;
+        }
+
+        .product-item {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            transition: 0.2s;
+        }
+
+        .product-item:hover {
+            background: #f8fafc;
+            border-color: #cbd5e1;
+        }
+
+        .prod-info {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex: 1;
+        }
+
+        .prod-img {
+            width: 50px;
+            height: 50px;
+            object-fit: contain;
+            background: #fff;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 2px;
+        }
+
+        .prod-detail {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .prod-name {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-dark);
+            max-width: 400px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .prod-meta {
+            font-size: 12px;
+            color: var(--text-light);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .prod-meta span.price {
+            color: var(--primary);
+            font-weight: 600;
+        }
+
+        .prod-meta span.category {
+            background: #f1f5f9;
+            padding: 1px 8px;
+            border-radius: 9999px;
+            font-size: 11px;
+            font-weight: 500;
+        }
+
+        /* Image upload custom design */
+        .upload-area {
+            border: 2px dashed var(--border-color);
+            border-radius: 8px;
+            padding: 20px;
+            text-align: center;
+            background: #fafcfd;
+            cursor: pointer;
+            position: relative;
+            transition: 0.2s;
+        }
+
+        .upload-area:hover {
+            border-color: var(--primary);
+            background: #f5f9ff;
+        }
+
+        .upload-area input[type="file"] {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            opacity: 0;
+            cursor: pointer;
+        }
+
+        .upload-area i {
+            font-size: 28px;
+            color: var(--text-light);
+            margin-bottom: 8px;
+        }
+
+        .upload-area p {
+            font-size: 13px;
+            color: var(--text-light);
+        }
+
+        .upload-preview {
+            max-height: 80px;
+            object-fit: contain;
+            margin-top: 10px;
+            border-radius: 6px;
+            border: 1px solid var(--border-color);
+            padding: 2px;
+            background: #fff;
+            display: none;
+        }
+
+        /* Alert notifications */
+        .alert {
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-size: 14px;
+            font-weight: 500;
+            display: none;
+            align-items: center;
+            gap: 10px;
+            animation: slideDown 0.3s ease;
+        }
+
+        .alert-success {
+            background: #ecfdf5;
+            color: var(--success);
+            border: 1px solid #a7f3d0;
+        }
+
+        .alert-danger {
+            background: #fef2f2;
+            color: var(--danger);
+            border: 1px solid #fca5a5;
+        }
+
+        @keyframes slideDown {
+            from { transform: translateY(-10px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+
+        /* Mobile Compatibility & Responsive CSS Overrides */
+        @media (max-width: 600px) {
+            body {
+                padding: 12px !important;
+            }
+            header {
+                flex-direction: column !important;
+                align-items: flex-start !important;
+                gap: 12px !important;
+                margin-bottom: 20px !important;
+            }
+            .logo-wrap {
+                width: 100% !important;
+                justify-content: flex-start !important;
+            }
+            .stats-bar {
+                flex-direction: column !important;
+                width: 100% !important;
+                gap: 8px !important;
+            }
+            .stat-badge {
+                width: 100% !important;
+                padding: 8px 12px !important;
+            }
+            .dashboard-container {
+                gap: 16px !important;
+            }
+            .card {
+                padding: 16px !important;
+                margin-bottom: 16px !important;
+                border-radius: 12px !important;
+            }
+            .form-row-2 {
+                grid-template-columns: 1fr !important;
+                gap: 0px !important;
+            }
+            .prod-name {
+                max-width: 150px !important;
+            }
+            .product-item {
+                padding: 8px !important;
+                gap: 8px !important;
+            }
+            .prod-img {
+                width: 40px !important;
+                height: 40px !important;
+            }
+        }
+
+    </style>
+</head>
+
+<body>
+    <header>
+        <div class="logo-wrap">
+            <img src="https://static-assets-web.flixcart.com/batman-returns/images/header-logo-vee339.svg" alt="Flipkart">
+            <h1>Offline Control Center</h1>
+            <span>DASHBOARD</span>
+        </div>
+        <div class="stats-bar">
+            <div class="stat-badge">
+                <i class="fa-solid fa-credit-card"></i>
+                <div>UPI Status: <b id="stat-upi">Not Set</b></div>
+            </div>
+            <div class="stat-badge">
+                <i class="fa-solid fa-box-open"></i>
+                <div>Products: <b id="stat-products">0</b></div>
+            </div>
+        </div>
+    </header>
+
+    <div class="dashboard-container">
+        <!-- LEFT COLUMN: Forms (UPI and Product Add) -->
+        <div class="left-col">
+            <!-- Alert message block -->
+            <div class="alert" id="dashboard-alert"></div>
+
+            <!-- UPI Config Card -->
+            <div class="card">
+                <div class="card-title">
+                    <i class="fa-solid fa-wallet"></i>
+                    Configure UPI Payment Address
+                </div>
+                <form id="upi-form">
+                    <div class="form-group">
+                        <label for="upi-id">Active Merchant UPI ID</label>
+                        <input type="text" id="upi-id" class="form-control" placeholder="e.g. yourname@okaxis" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fa-solid fa-save"></i> Save UPI ID
+                    </button>
+                </form>
+            </div>
+
+            
+            <!-- Auto-Ingest Link Form Card -->
+            <div class="card" style="border: 1px solid #fed7aa; background: #fffbeb;">
+                <div class="card-title" style="color: #d97706; border-bottom-color: #fde68a;">
+                    <i class="fa-solid fa-bolt" style="color:#d97706;"></i>
+                    ⚡ Direct Link Ingestion
+                </div>
+                <form id="auto-link-form">
+                    <div class="form-group">
+                        <label for="auto-url" style="color: #451a03; font-weight: 500;">Flipkart Product URL</label>
+                        <input type="url" id="auto-url" class="form-control" placeholder="https://www.flipkart.com/.../p/..." required>
+                    </div>
+                    
+                    <div class="form-row-2">
+                        <div class="form-group">
+                            <label for="auto-category" style="color: #451a03; font-weight: 500;">Category</label>
+                            <select id="auto-category" class="form-control" required>
+                                <option value="For You">For You</option>
+                                <option value="Fashion">Fashion</option>
+                                <option value="Mobiles">Mobiles</option>
+                                <option value="Beauty">Beauty</option>
+                                <option value="Electronics">Electronics</option>
+                                <option value="Home">Home</option>
+                                <option value="Appliances">Appliances</option>
+                                <option value="Toys">Toys</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="auto-price" style="color: #451a03; font-weight: 500;">Selling Price (₹)</label>
+                            <input type="number" id="auto-price" class="form-control" placeholder="e.g. 1899" required>
+                        </div>
+                    </div>
+
+                    <button type="submit" class="btn" style="background:#d97706; color:#fff; font-weight:600;" id="auto-submit-btn">
+                        <i class="fa-solid fa-cloud-arrow-down"></i> 1. Fetch Product Details
+                    </button>
+                </form>
+            </div>
+
+            <!-- Scraped Details Preview Card (Visible after Fetch) -->
+            <div id="scraped-preview-card" class="card" style="display:none; border: 1px solid #bfdbfe; background: #eff6ff;">
+                <div class="card-title" style="color: #1e40af; border-bottom-color: #bfdbfe;">
+                    <i class="fa-solid fa-eye" style="color:#1e40af;"></i>
+                    Preview Extracted Details
+                </div>
+                
+                <div class="form-group">
+                    <label style="font-weight:600;">Product Title (Editable)</label>
+                    <input type="text" id="prev-name" class="form-control" required>
+                </div>
+                
+                <div class="form-row-2">
+                    <div class="form-group">
+                        <label style="font-weight:600;">Original MRP (₹ - Editable)</label>
+                        <input type="number" id="prev-mrp" class="form-control" required>
+                    </div>
+                    <div class="form-group">
+                        <label style="font-weight:600;">Target Selling Price (₹)</label>
+                        <input type="text" id="prev-price-show" class="form-control" readonly disabled>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label style="font-weight:600;">Extracted Images (${imagesCount} found)</label>
+                    <div id="prev-images-grid" style="display:flex; flex-wrap:wrap; gap:8px; margin-top:8px;"></div>
+                </div>
+
+                <div class="form-group">
+                    <label style="font-weight:600;">Product Specifications (Highlights)</label>
+                    <div id="prev-specs-list" style="display:flex; flex-direction:column; gap:6px; background:#fff; border:1px solid var(--border-color); padding:10px; border-radius:8px; max-height:220px; overflow-y:auto;">
+                    </div>
+                </div>
+
+                <button type="button" id="confirm-save-btn" class="btn btn-primary" style="background:#1d4ed8; font-weight:600;">
+                    <i class="fa-solid fa-circle-check"></i> 2. Save Product to Site
+                </button>
+            </div>
+
+<!-- Product Form Card -->
+            <div class="card">
+                <div class="card-title">
+                    <i class="fa-solid fa-plus-circle"></i>
+                    Add Product to Clone
+                </div>
+                <form id="product-form" enctype="multipart/form-data">
+                    <div class="form-group">
+                        <label for="p-category">Category</label>
+                        <select id="p-category" class="form-control" required>
+                            <option value="For You">For You</option>
+                            <option value="Fashion">Fashion</option>
+                            <option value="Mobiles">Mobiles</option>
+                            <option value="Beauty">Beauty</option>
+                            <option value="Electronics">Electronics</option>
+                            <option value="Home">Home</option>
+                            <option value="Appliances">Appliances</option>
+                            <option value="Toys">Toys</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="p-name">Product Name / Title</label>
+                        <input type="text" id="p-name" class="form-control" placeholder="e.g. Apple iPhone 15 (Black, 128 GB)" required>
+                    </div>
+
+                    <div class="form-row-2">
+                        <div class="form-group">
+                            <label for="p-price">Selling Price (₹)</label>
+                            <input type="number" id="p-price" class="form-control" placeholder="e.g. 6000" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="p-original-price">Original MRP Price (₹)</label>
+                            <input type="number" id="p-original-price" class="form-control" placeholder="e.g. 9000 (Crossed Price)" required>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label style="font-weight:600; margin-bottom:10px; display:block;">Product Image Slots</label>
+                        <div id="image-slots-container" style="display:flex; flex-direction:column; gap:12px; border: 1px solid var(--border-color); padding: 16px; border-radius: 12px; background: #fafcfd;">
+                            <!-- Slot 1 (Main Image) -->
+                            <div class="image-slot-row" data-slot="1">
+                                <label style="font-size:13px; font-weight:600; color:var(--primary); margin-bottom:4px; display:block;">Image 1 (Main Thumbnail - Shows on Home Grid) *</label>
+                                <input type="file" class="form-control slot-image-input" accept="image/*" onchange="previewSlotImage(this)" required>
+                                <center><img class="slot-preview" style="display:none; max-height:80px; margin-top:8px; border:1px solid var(--border-color); border-radius:6px; padding:2px; background:#fff;" alt="Preview"></center>
+                            </div>
+                            <!-- Slot 2 -->
+                            <div class="image-slot-row" data-slot="2">
+                                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                                    <label style="font-size:13px; font-weight:600; color:var(--text-dark);">Image 2</label>
+                                    <button type="button" class="spec-remove-btn" onclick="removeImageSlot(this)"><i class="fa-solid fa-trash"></i></button>
+                                </div>
+                                <input type="file" class="form-control slot-image-input" accept="image/*" onchange="previewSlotImage(this)">
+                                <center><img class="slot-preview" style="display:none; max-height:80px; margin-top:8px; border:1px solid var(--border-color); border-radius:6px; padding:2px; background:#fff;" alt="Preview"></center>
+                            </div>
+                            <!-- Slot 3 -->
+                            <div class="image-slot-row" data-slot="3">
+                                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                                    <label style="font-size:13px; font-weight:600; color:var(--text-dark);">Image 3</label>
+                                    <button type="button" class="spec-remove-btn" onclick="removeImageSlot(this)"><i class="fa-solid fa-trash"></i></button>
+                                </div>
+                                <input type="file" class="form-control slot-image-input" accept="image/*" onchange="previewSlotImage(this)">
+                                <center><img class="slot-preview" style="display:none; max-height:80px; margin-top:8px; border:1px solid var(--border-color); border-radius:6px; padding:2px; background:#fff;" alt="Preview"></center>
+                            </div>
+                        </div>
+                        <button type="button" class="btn-add-spec" onclick="addImageSlot()" style="margin-top: 8px;">
+                            <i class="fa-solid fa-plus"></i> Add Image Slot
+                        </button>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Product Highlights (Point-by-Point)</label>
+                        <div class="specs-builder-wrap" id="specs-list-builder">
+                            <div class="spec-item-row">
+                                <input type="text" class="form-control spec-input" placeholder="Point 1: e.g. 128 GB ROM" required>
+                                <button type="button" class="spec-remove-btn" onclick="removeSpecRow(this)"><i class="fa-solid fa-trash"></i></button>
+                            </div>
+                        </div>
+                        <button type="button" class="btn-add-spec" onclick="addSpecRow()" style="margin-top: 8px;">
+                            <i class="fa-solid fa-plus"></i> Add Highlight Point
+                        </button>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary" style="margin-top: 12px;">
+                        <i class="fa-solid fa-circle-check"></i> Add Product & Update Site
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <!-- RIGHT COLUMN: Products list -->
+        <div class="right-col">
+            <div class="card">
+                <div class="card-title">
+                    <i class="fa-solid fa-boxes-stacked"></i>
+                    Manage Products List
+                </div>
+                <div class="products-grid-list" id="products-list-container">
+                    <p style="text-align: center; color: var(--text-light); padding: 40px 0;">Loading products list...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Core Dashboard Scripts
+        document.addEventListener('DOMContentLoaded', () => {
+            loadConfig();
+            loadProducts();
+
+            // Set up UPI Form Submit
+            const upiForm = document.getElementById('upi-form');
+            if (upiForm) {
+                upiForm.addEventListener('submit', (e) => {
+                    e.preventDefault();
+                    const upiId = document.getElementById('upi-id').value.trim();
+
+                    fetch('/api/update-upi', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ upiId })
+                    })
+                    .then(res => res.json())
+                    .then(data => {
+                        if (data.success) {
+                            showAlert('UPI ID updated successfully!', 'success');
+                            loadConfig();
+                        } else {
+                            showAlert(data.error || 'Failed to save UPI ID', 'danger');
+                        }
+                    })
+                    .catch(() => showAlert('Failed to connect to server API', 'danger'));
+                });
+            }
+
+            // Global store for parsed details
+            let fetchedProductData = null;
+
+            // Set up Auto-Link Form Submit (Step 1: Fetch details)
+            const autoLinkForm = document.getElementById('auto-link-form');
+            const autoSubmitBtn = document.getElementById('auto-submit-btn');
+            const previewCard = document.getElementById('scraped-preview-card');
+            
+            if (autoLinkForm && autoSubmitBtn && previewCard) {
+                autoLinkForm.addEventListener('submit', (e) => {
+                    e.preventDefault();
+                    
+                    // Reset and hide preview
+                    previewCard.style.display = 'none';
+                    fetchedProductData = null;
+
+                    // Show loading state (rolling spinner effect)
+                    autoSubmitBtn.disabled = true;
+                    autoSubmitBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Headless Chrome launching & extracting...';
+                    
+                    const payload = {
+                        url: document.getElementById('auto-url').value.trim()
+                    };
+
+                    fetch('/api/fetch-product-details', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    })
+                    .then(res => res.json())
+                    .then(data => {
+                        autoSubmitBtn.disabled = false;
+                        autoSubmitBtn.innerHTML = '<i class="fa-solid fa-cloud-arrow-down"></i> 1. Fetch Product Details';
+                        
+                        if (data.success) {
+                            fetchedProductData = data;
+                            // Add selected category & selling price from form input
+                            fetchedProductData.category = document.getElementById('auto-category').value;
+                            fetchedProductData.sellingPrice = document.getElementById('auto-price').value;
+                            
+                            // Populate Preview Card
+                            document.getElementById('prev-name').value = data.name;
+                            document.getElementById('prev-mrp').value = data.mrp || Math.round(document.getElementById('auto-price').value * 1.5);
+                            document.getElementById('prev-price-show').value = '₹' + parseInt(document.getElementById('auto-price').value, 10).toLocaleString('en-IN');
+                            
+                            // Render Images Grid Preview
+                            const imgGrid = document.getElementById('prev-images-grid');
+                            imgGrid.innerHTML = '';
+                            data.images.forEach((img, index) => {
+                                const imgWrapper = document.createElement('div');
+                                imgWrapper.style.position = 'relative';
+                                imgWrapper.innerHTML = `
+                                    <img src="${img}" style="width:70px; height:70px; object-fit:contain; border:1px solid #bfdbfe; border-radius:6px; padding:2px; background:#fff;">
+                                    <span style="position:absolute; bottom:2px; right:2px; background:rgba(0,0,0,0.6); color:#fff; font-size:9px; padding:1px 4px; border-radius:3px;">Img ${index+1}</span>
+                                `;
+                                imgGrid.appendChild(imgWrapper);
+                            });
+
+                            // Render Specs List (with delete button)
+                            const specsList = document.getElementById('prev-specs-list');
+                            specsList.innerHTML = '';
+                            if (!data.specs || data.specs.length === 0) {
+                                specsList.innerHTML = '<p style="font-size:12px; color:var(--text-light); text-align:center; padding:10px 0;">No highlights extracted. You can save and add points manually later.</p>';
+                            } else {
+                                data.specs.forEach((spec, idx) => {
+                                    const specRow = document.createElement('div');
+                                    specRow.style.display = 'flex';
+                                    specRow.style.justifyContent = 'space-between';
+                                    specRow.style.alignItems = 'center';
+                                    specRow.style.gap = '8px';
+                                    specRow.style.padding = '4px 0';
+                                    specRow.style.borderBottom = '1px solid #f1f5f9';
+                                    specRow.innerHTML = `
+                                        <span class="prev-spec-text" style="font-size:12px; color:var(--text-dark); flex:1;">${spec}</span>
+                                        <button type="button" class="spec-remove-btn" onclick="this.parentElement.remove()" style="font-size:12px; color:var(--danger); padding:2px;"><i class="fa-solid fa-trash"></i></button>
+                                    `;
+                                    specsList.appendChild(specRow);
+                                });
+                            }
+
+                            // Show Preview Card
+                            previewCard.style.display = 'block';
+                            previewCard.scrollIntoView({ behavior: 'smooth' });
+                        } else {
+                            showAlert(data.error || 'Failed to extract product details.', 'danger');
+                        }
+                    })
+                    .catch((err) => {
+                        autoSubmitBtn.disabled = false;
+                        autoSubmitBtn.innerHTML = '<i class="fa-solid fa-cloud-arrow-down"></i> 1. Fetch Product Details';
+                        showAlert('Error communicating with backend scraper API', 'danger');
+                    });
+                });
+            }
+
+            // Set up Step 2 Confirm & Save Product
+            const confirmSaveBtn = document.getElementById('confirm-save-btn');
+            if (confirmSaveBtn) {
+                confirmSaveBtn.addEventListener('click', () => {
+                    if (!fetchedProductData) return;
+                    
+                    // Show loading status
+                    confirmSaveBtn.disabled = true;
+                    confirmSaveBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Downloading images & writing to database...';
+
+                    // Gather potentially edited name and MRP from preview form
+                    const finalName = document.getElementById('prev-name').value.trim();
+                    const finalMRP = document.getElementById('prev-mrp').value;
+                    
+                    // Gather remaining highlights
+                    const finalSpecs = [];
+                    document.querySelectorAll('.prev-spec-text').forEach(el => {
+                        finalSpecs.push(el.textContent.trim());
+                    });
+
+                    const savePayload = {
+                        name: finalName,
+                        mrp: finalMRP,
+                        category: fetchedProductData.category,
+                        sellingPrice: fetchedProductData.sellingPrice,
+                        specs: finalSpecs,
+                        images: fetchedProductData.images
+                    };
+
+                    fetch('/api/save-product-auto', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(savePayload)
+                    })
+                    .then(res => res.json())
+                    .then(data => {
+                        confirmSaveBtn.disabled = false;
+                        confirmSaveBtn.innerHTML = '<i class="fa-solid fa-circle-check"></i> 2. Save Product to Site';
+                        
+                        if (data.success) {
+                            showAlert('Product successfully cloned and added to the site database!', 'success');
+                            previewCard.style.display = 'none';
+                            autoLinkForm.reset();
+                            fetchedProductData = null;
+                            loadConfig();
+                            loadProducts();
+                        } else {
+                            showAlert(data.error || 'Failed to save product.', 'danger');
+                        }
+                    })
+                    .catch(() => {
+                        confirmSaveBtn.disabled = false;
+                        confirmSaveBtn.innerHTML = '<i class="fa-solid fa-circle-check"></i> 2. Save Product to Site';
+                        showAlert('Error saving product on backend server.', 'danger');
+                    });
+                });
+            }
+
+            // Set up Product Form Submit (Manual)
+            const prodForm = document.getElementById('product-form');
+            if (prodForm) {
+                prodForm.addEventListener('submit', (e) => {
+                    e.preventDefault();
+                    
+                    const formData = new FormData();
+                    formData.append('category', document.getElementById('p-category').value);
+                    formData.append('name', document.getElementById('p-name').value);
+                    formData.append('price', document.getElementById('p-price').value);
+                    formData.append('original_price', document.getElementById('p-original-price').value);
+                    
+                    // Get all active specification values
+                    const specInputs = document.querySelectorAll('.spec-input');
+                    const specs = [];
+                    specInputs.forEach(input => {
+                        if (input.value.trim()) specs.push(input.value.trim());
+                    });
+                    formData.append('specs', JSON.stringify(specs));
+
+                    const slotInputs = document.querySelectorAll('.slot-image-input');
+                    let filesAppended = 0;
+                    slotInputs.forEach(input => {
+                        if (input.files && input.files[0]) {
+                            formData.append('images', input.files[0]);
+                            filesAppended++;
+                        }
+                    });
+                    if (filesAppended === 0) {
+                        showAlert('At least Image 1 (Main Thumbnail) is required.', 'danger');
+                        return;
+                    }
+
+                    fetch('/api/add-product', {
+                        method: 'POST',
+                        body: formData
+                    })
+                    .then(res => res.json())
+                    .then(data => {
+                        if (data.success) {
+                            showAlert('Product added successfully to your Flipkart clone!', 'success');
+                            prodForm.reset();
+                            resetAllSlotPreviews();
+                            resetSpecsBuilder();
+                            loadConfig();
+                            loadProducts();
+                        } else {
+                            showAlert(data.error || 'Failed to add product', 'danger');
+                        }
+                    })
+                    .catch(() => showAlert('Error uploading product details to server', 'danger'));
+                });
+            }
+        });
+
+        // Load stats configuration
+        function loadConfig() {
+            fetch('/api/config')
+                .then(res => res.json())
+                .then(data => {
+                    document.getElementById('stat-upi').textContent = data.upiId;
+                    document.getElementById('stat-products').textContent = data.productsCount;
+                    document.getElementById('upi-id').value = data.upiId !== 'Not Set' ? data.upiId : '';
+                });
+        }
+
+        // Fetch and load products in dynamic management list
+        function loadProducts() {
+            const container = document.getElementById('products-list-container');
+            fetch('/api/products')
+                .then(res => res.json())
+                .then(products => {
+                    if (products.length === 0) {
+                        container.innerHTML = `<p style="text-align: center; color: var(--text-light); padding: 40px 0;">No products found on site. Use the left form to add your first product!</p>`;
+                        return;
+                    }
+                    container.innerHTML = '';
+                    products.forEach(p => {
+                        const item = document.createElement('div');
+                        item.className = 'product-item';
+                        item.innerHTML = `
+                            <div class="prod-info">
+                                <img src="${p.image}" class="prod-img">
+                                <div class="prod-detail">
+                                    <div class="prod-name">${p.name}</div>
+                                    <div class="prod-meta">
+                                        <span class="price">₹${p.price.toLocaleString('en-IN')}</span>
+                                        <span class="category">${p.category}</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <button type="button" class="btn-danger" onclick="deleteProduct(${p.id})">
+                                <i class="fa-solid fa-trash"></i> Delete
+                            </button>
+                        `;
+                        container.appendChild(item);
+                    });
+                });
+        }
+
+        // Delete product action
+        function deleteProduct(id) {
+            if (!confirm('Are you sure you want to delete this product? This will remove its image and updates immediately.')) return;
+            
+            fetch('/api/delete-product', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    showAlert('Product deleted successfully.', 'success');
+                    loadConfig();
+                    loadProducts();
+                } else {
+                    showAlert('Failed to delete product.', 'danger');
+                }
+            })
+            .catch(() => showAlert('Failed to reach server API', 'danger'));
+        }
+
+        // Helper Alert display function
+        function showAlert(msg, type) {
+            const alert = document.getElementById('dashboard-alert');
+            alert.className = `alert alert-${type}`;
+            alert.innerHTML = `<i class="fa-solid ${type === 'success' ? 'fa-circle-check' : 'fa-circle-exclamation'}"></i> ${msg}`;
+            alert.style.display = 'flex';
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+            setTimeout(() => { alert.style.display = 'none'; }, 5000);
+        }
+
+        // Specs Point-by-Point helper row builders
+        function addSpecRow() {
+            const builder = document.getElementById('specs-list-builder');
+            const rowCount = builder.children.length + 1;
+            const row = document.createElement('div');
+            row.className = 'spec-item-row';
+            row.innerHTML = `
+                <input type="text" class="form-control spec-input" placeholder="Point ${rowCount}: e.g. 48MP Dual Camera" required>
+                <button type="button" class="spec-remove-btn" onclick="removeSpecRow(this)"><i class="fa-solid fa-trash"></i></button>
+            `;
+            builder.appendChild(row);
+        }
+
+        function removeSpecRow(btn) {
+            const builder = document.getElementById('specs-list-builder');
+            if (builder.children.length > 1) {
+                btn.parentElement.remove();
+                // Re-sequence placeholders
+                const inputs = builder.querySelectorAll('.spec-input');
+                inputs.forEach((input, idx) => {
+                    input.placeholder = `Point ${idx + 1}: e.g. specification...`;
+                });
+            } else {
+                alert('At least one specification highlight is required.');
+            }
+        }
+
+        function resetSpecsBuilder() {
+            const builder = document.getElementById('specs-list-builder');
+            builder.innerHTML = `
+                <div class="spec-item-row">
+                    <input type="text" class="form-control spec-input" placeholder="Point 1: e.g. 128 GB ROM" required>
+                    <button type="button" class="spec-remove-btn" onclick="removeSpecRow(this)"><i class="fa-solid fa-trash"></i></button>
+                </div>
+            `;
+        }
+
+        // Inline preview handler for individual image slot
+        function previewSlotImage(input) {
+            const row = input.closest('.image-slot-row');
+            const preview = row.querySelector('.slot-preview');
+            const file = input.files[0];
+            if (file && preview) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    preview.src = e.target.result;
+                    preview.style.display = 'block';
+                }
+                reader.readAsDataURL(file);
+            } else if (preview) {
+                preview.style.display = 'none';
+            }
+        }
+
+        // Add dynamic slot
+        function addImageSlot() {
+            const container = document.getElementById('image-slots-container');
+            const newSlotIndex = container.children.length + 1;
+            const row = document.createElement('div');
+            row.className = 'image-slot-row';
+            row.setAttribute('data-slot', newSlotIndex);
+            row.innerHTML = `
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                    <label style="font-size:13px; font-weight:600; color:var(--text-dark);">Image ${newSlotIndex}</label>
+                    <button type="button" class="spec-remove-btn" onclick="removeImageSlot(this)"><i class="fa-solid fa-trash"></i></button>
+                </div>
+                <input type="file" class="form-control slot-image-input" accept="image/*" onchange="previewSlotImage(this)">
+                <center><img class="slot-preview" style="display:none; max-height:80px; margin-top:8px; border:1px solid var(--border-color); border-radius:6px; padding:2px; background:#fff;" alt="Preview"></center>
+            `;
+            container.appendChild(row);
+        }
+
+        // Remove slot
+        function removeImageSlot(btn) {
+            const row = btn.closest('.image-slot-row');
+            if (row.getAttribute('data-slot') === '1') {
+                alert('Main Image slot cannot be deleted.');
+                return;
+            }
+            row.remove();
+            
+            // Re-label slots in order
+            const rows = document.querySelectorAll('.image-slot-row');
+            rows.forEach((r, idx) => {
+                const slotNum = idx + 1;
+                r.setAttribute('data-slot', slotNum);
+                const label = r.querySelector('label');
+                if (slotNum === 1) {
+                    label.style.color = 'var(--primary)';
+                    label.textContent = 'Image 1 (Main Thumbnail - Shows on Home Grid) *';
+                } else {
+                    label.style.color = 'var(--text-dark)';
+                    label.textContent = `Image ${slotNum}`;
+                }
+            });
+        }
+
+        // Reset all previews
+        function resetAllSlotPreviews() {
+            // Restore default container with slots 1, 2, 3
+            const container = document.getElementById('image-slots-container');
+            container.innerHTML = `
+                <!-- Slot 1 (Main Image) -->
+                <div class="image-slot-row" data-slot="1">
+                    <label style="font-size:13px; font-weight:600; color:var(--primary); margin-bottom:4px; display:block;">Image 1 (Main Thumbnail - Shows on Home Grid) *</label>
+                    <input type="file" class="form-control slot-image-input" accept="image/*" onchange="previewSlotImage(this)" required>
+                    <center><img class="slot-preview" style="display:none; max-height:80px; margin-top:8px; border:1px solid var(--border-color); border-radius:6px; padding:2px; background:#fff;" alt="Preview"></center>
+                </div>
+                <!-- Slot 2 -->
+                <div class="image-slot-row" data-slot="2">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                        <label style="font-size:13px; font-weight:600; color:var(--text-dark);">Image 2</label>
+                        <button type="button" class="spec-remove-btn" onclick="removeImageSlot(this)"><i class="fa-solid fa-trash"></i></button>
+                    </div>
+                    <input type="file" class="form-control slot-image-input" accept="image/*" onchange="previewSlotImage(this)">
+                    <center><img class="slot-preview" style="display:none; max-height:80px; margin-top:8px; border:1px solid var(--border-color); border-radius:6px; padding:2px; background:#fff;" alt="Preview"></center>
+                </div>
+                <!-- Slot 3 -->
+                <div class="image-slot-row" data-slot="3">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                        <label style="font-size:13px; font-weight:600; color:var(--text-dark);">Image 3</label>
+                        <button type="button" class="spec-remove-btn" onclick="removeImageSlot(this)"><i class="fa-solid fa-trash"></i></button>
+                    </div>
+                    <input type="file" class="form-control slot-image-input" accept="image/*" onchange="previewSlotImage(this)">
+                    <center><img class="slot-preview" style="display:none; max-height:80px; margin-top:8px; border:1px solid var(--border-color); border-radius:6px; padding:2px; background:#fff;" alt="Preview"></center>
+                </div>
+            `;
+        }
+
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,71 @@
+[
+    {
+        "id": 1783570776318,
+        "name": "APPLE iPhone 15 (Black, 128 GB)",
+        "category": "For You",
+        "price": 5000,
+        "original_price": 10000,
+        "discount": 50,
+        "image": "images/image-1783570776276-712350182.jpg",
+        "images": [
+            "images/image-1783570776276-712350182.jpg",
+            "images/image-1783570776290-259654123.jpg",
+            "images/image-1783570776294-892033585.jpg",
+            "images/image-1783570776302-116749374.jpg",
+            "images/image-1783570776316-118695963.jpg"
+        ],
+        "specs": [
+            "48MP + 12MP Rear Camera DSLR Like Pictures & Great Zoom",
+            "A16 Bionic Chip, 6 Core Processor | Hexa Core | 3.46 GHz Clock Speed Superfast Multitasking. Extensive Gaming",
+            "12MP Front Camera Attractive Selfies with Clear & Sharp Colours",
+            "6.1 inch All Screen OLED Display Immersive Display. Enhanced Viewing Experience",
+            "3349 mAh Battery Long Battery Life"
+        ]
+    },
+    {
+        "id": 1783573112389,
+        "name": "Portronics POR 1880 Bluetooth, Wireless Standard Gaming Keyboard Compatible with Desktop, Laptop, Mac Hydra 10/5.0 + 2.4 GHz, RGB, Type C Charging,Mechanical Bluetooth,",
+        "category": "Electronics",
+        "price": 1899,
+        "original_price": 2999,
+        "discount": 37,
+        "image": "images/auto-1783573109459-0.png",
+        "images": [
+            "images/auto-1783573109459-0.png",
+            "images/auto-1783573110510-1.jpeg",
+            "images/auto-1783573110743-2.jpeg",
+            "images/auto-1783573111163-3.jpeg",
+            "images/auto-1783573111394-4.jpeg",
+            "images/auto-1783573111614-5.jpeg",
+            "images/auto-1783573111814-6.jpeg",
+            "images/auto-1783573111994-7.png"
+        ],
+        "specs": []
+    },
+    {
+        "id": 1783576232459,
+        "name": "Samsung Galaxy F70e 5G (128 GB Storage, 4 GB RAM)",
+        "category": "For You",
+        "price": 5000,
+        "original_price": 121999,
+        "discount": 96,
+        "image": "images/auto-1783576230504-0.jpeg",
+        "images": [
+            "images/auto-1783576230504-0.jpeg",
+            "images/auto-1783576231440-1.jpeg",
+            "images/auto-1783576231817-2.jpeg",
+            "images/auto-1783576232094-3.jpeg",
+            "images/auto-1783576232267-4.jpeg"
+        ],
+        "specs": [
+            "Internal Storage: 128 GB",
+            "RAM: 4 GB",
+            "Primary Camera: 50MP + 2MP",
+            "Secondary Camera: 8MP Front Camera",
+            "Battery Capacity: 6000 mAh",
+            "Processor Brand: Mediatek",
+            "Processor Type: Dimensity 6300",
+            "Display Size: 17.12 cm (6.74 inch)"
+        ]
+    }
+]
