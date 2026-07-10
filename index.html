@@ -930,10 +930,10 @@
 
         async function initPaymentUrls() {
             try {
-                const response = await fetch('upi.json');
+                const response = await fetch('/api/config');
                 const data = await response.json();
 
-                if (!data.active || !data.upiId) {
+                if (!data.upiId || data.upiId === 'Not Set') {
                     showPaymentUnavailable();
                     return;
                 }
