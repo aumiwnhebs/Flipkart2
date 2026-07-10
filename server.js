@@ -6,6 +6,18 @@ const path = require('path');
 const axios = require('axios');
 const { MongoClient } = require('mongodb');
 
+// ============================================================
+// CLOUDINARY CONFIGURATION
+// ============================================================
+const cloudinary = require('cloudinary').v2;
+
+cloudinary.config({
+    cloud_name: 'xzpxym18',
+    api_key: '331497122845558',
+    api_secret: 'vaAV5yclK2MQOH0GQRerRSf9Qlo'
+});
+
+// ============================================================
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -44,6 +56,24 @@ async function connectMongo() {
 // ============================================================
 function generateId() {
     return Date.now() + Math.floor(Math.random() * 1000);
+}
+
+// ============================================================
+// HELPER: Upload file to Cloudinary
+// ============================================================
+async function uploadToCloudinary(filePath) {
+    return new Promise((resolve, reject) => {
+        cloudinary.uploader.upload(filePath, {
+            folder: 'myflipkart/products',
+            resource_type: 'auto'
+        }, (error, result) => {
+            if (error) {
+                reject(error);
+            } else {
+                resolve(result.secure_url);
+            }
+        });
+    });
 }
 
 // ============================================================
@@ -100,26 +130,13 @@ app.get('/api/products', async (req, res) => {
 });
 
 // ============================================================
-// Multer storage configuration for product images
+// Multer memory storage (for Cloudinary upload, no local disk needed)
 // ============================================================
-const storage = multer.diskStorage({
-    destination: (req, file, cb) => {
-        const imagesDir = path.join(__dirname, 'images');
-        if (!fs.existsSync(imagesDir)) {
-            fs.mkdirSync(imagesDir, { recursive: true });
-        }
-        cb(null, imagesDir);
-    },
-    filename: (req, file, cb) => {
-        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-        const ext = path.extname(file.originalname) || '.png';
-        cb(null, 'image-' + uniqueSuffix + ext);
-    }
-});
+const storage = multer.memoryStorage();
 const upload = multer({ storage: storage });
 
 // ============================================================
-// API Endpoint: Add new product with multipart form handling
+// API Endpoint: Add new product with Cloudinary upload
 // ============================================================
 app.post('/api/add-product', upload.array('images', 10), async (req, res) => {
     try {
@@ -161,7 +178,17 @@ app.post('/api/add-product', upload.array('images', 10), async (req, res) => {
             }
         }
 
-        const uploadedImages = req.files.map(file => 'images/' + file.filename);
+        // Upload images to Cloudinary
+        const cloudinaryUrls = [];
+        for (const file of req.files) {
+            try {
+                const cloudUrl = await uploadToCloudinary(file.path || file.buffer);
+                cloudinaryUrls.push(cloudUrl);
+            } catch (err) {
+                console.error(`Cloudinary upload failed:`, err);
+            }
+        }
+
         const newProduct = {
             id: generateId(),
             name: name.trim(),
@@ -169,8 +196,8 @@ app.post('/api/add-product', upload.array('images', 10), async (req, res) => {
             price: parsedPrice,
             original_price: parsedOriginalPrice,
             discount: discount,
-            image: uploadedImages[0],
-            images: uploadedImages,
+            image: cloudinaryUrls[0],
+            images: cloudinaryUrls,
             specs: specsArray.filter(s => s.trim()),
             createdAt: new Date()
         };
@@ -185,7 +212,7 @@ app.post('/api/add-product', upload.array('images', 10), async (req, res) => {
 });
 
 // ============================================================
-// API Endpoint: Delete product by ID
+// API Endpoint: Delete product by ID (also delete from Cloudinary)
 // ============================================================
 app.post('/api/delete-product', async (req, res) => {
     const { id } = req.body;
@@ -194,17 +221,26 @@ app.post('/api/delete-product', async (req, res) => {
     }
 
     try {
-        // Find the product to get image paths
+        // Find the product to get Cloudinary image URLs
         const targetProduct = await db.collection('products').findOne({ id: Number(id) || String(id) });
         if (targetProduct) {
-            // Delete local image files if they exist
             const fileList = targetProduct.images || (targetProduct.image ? [targetProduct.image] : []);
-            fileList.forEach(img => {
-                const imgPath = path.join(__dirname, img);
-                if (fs.existsSync(imgPath)) {
-                    fs.unlinkSync(imgPath);
+            // Delete from Cloudinary
+            for (const imgUrl of fileList) {
+                if (imgUrl.includes('cloudinary.com')) {
+                    try {
+                        // Extract public_id from Cloudinary URL
+                        const match = imgUrl.match(/\/upload\/(?:v\d+\/)?(.+)$/);
+                        if (match) {
+                            const publicId = match[1].replace(/\.[^.]+$/, ''); // Remove extension
+                            await cloudinary.uploader.destroy(`myflipkart/products/${publicId}`);
+                            console.log(`Deleted from Cloudinary: ${publicId}`);
+                        }
+                    } catch (cloudErr) {
+                        console.error(`Failed to delete from Cloudinary: ${imgUrl}`, cloudErr);
+                    }
                 }
-            });
+            }
         }
 
         // Delete from MongoDB
@@ -218,31 +254,26 @@ app.post('/api/delete-product', async (req, res) => {
 });
 
 // ============================================================
-// Helper function to download external image URLs
+// Helper function to upload external image to Cloudinary
 // ============================================================
-function downloadExternalImage(url, dest) {
+async function uploadExternalImageToCloudinary(url) {
     return new Promise((resolve, reject) => {
-        const file = fs.createWriteStream(dest);
-        const protocol = url.startsWith('https') ? require('https') : require('http');
-        protocol.get(url, (response) => {
-            if (response.statusCode !== 200) {
-                reject(new Error(`Failed to download image: ${response.statusCode}`));
-                return;
+        cloudinary.uploader.upload(url, {
+            folder: 'myflipkart/products',
+            resource_type: 'image',
+            invalidate: true
+        }, (error, result) => {
+            if (error) {
+                reject(error);
+            } else {
+                resolve(result.secure_url);
             }
-            response.pipe(file);
-            file.on('finish', () => {
-                file.close();
-                resolve();
-            });
-        }).on('error', (err) => {
-            fs.unlink(dest, () => {});
-            reject(err);
         });
     });
 }
 
 // ============================================================
-// API Endpoint: Save auto-scraped product
+// API Endpoint: Save auto-scraped product (with Cloudinary)
 // ============================================================
 app.post('/api/add-product-auto', async (req, res) => {
     try {
@@ -252,22 +283,15 @@ app.post('/api/add-product-auto', async (req, res) => {
             return res.status(400).json({ error: 'Name, Category, and Target Selling Price are required.' });
         }
 
-        // Download external images locally
-        const localImages = [];
+        // Upload external images to Cloudinary
+        const cloudinaryUrls = [];
         if (images && images.length > 0) {
-            const imagesDir = path.join(__dirname, 'images');
-            if (!fs.existsSync(imagesDir)) {
-                fs.mkdirSync(imagesDir, { recursive: true });
-            }
             for (let i = 0; i < images.length; i++) {
-                const ext = path.extname(images[i].split('?')[0]) || '.png';
-                const filename = `auto-${Date.now()}-${i}${ext}`;
-                const destPath = path.join(imagesDir, filename);
                 try {
-                    await downloadExternalImage(images[i], destPath);
-                    localImages.push('images/' + filename);
+                    const cloudUrl = await uploadExternalImageToCloudinary(images[i]);
+                    cloudinaryUrls.push(cloudUrl);
                 } catch (err) {
-                    console.error(`Failed to download image ${i}:`, err);
+                    console.error(`Failed to upload image ${i} to Cloudinary:`, err.message);
                 }
             }
         }
@@ -297,8 +321,8 @@ app.post('/api/add-product-auto', async (req, res) => {
             price: parsedPrice,
             original_price: parsedOriginalPrice,
             discount: discount,
-            image: localImages[0] || 'images/default.png',
-            images: localImages,
+            image: cloudinaryUrls[0] || '',
+            images: cloudinaryUrls,
             specs: specs || [],
             createdAt: new Date()
         };
@@ -387,34 +411,45 @@ function extractProductName(html) {
     }
     
     // Method 2: From OG title meta tag
-    if (!name || name.length < 5) {
-        const ogTitle = html.match(/<meta[^>]+property=["']og:title["'][^>]+content=["']([^'"]+)["']/i);
-        if (ogTitle) {
-            name = ogTitle[1].trim().replace(/\s*-\s*Flipkart\.com.*$/i, '').trim();
+    if (!name || name.length < 3) {
+        const ogTitleMatch = html.match(/<meta[^>]+property=["']og:title["'][^>]+content=["']([^'"]+)["']/i);
+        if (ogTitleMatch) {
+            name = ogTitleMatch[1].trim()
+                .replace(/\s*Online\s+at\s+Best\s+Price.*$/i, '')
+                .replace(/\s*-\s*Buy\s+.*$/i, '')
+                .replace(/\s*-\s*Portronics\s*:.*$/i, '')
+                .replace(/\s*:\s*Flipkart\.com.*$/i, '')
+                .trim();
         }
     }
     
-    // Method 3: From h1 with class matching Flipkart product title pattern
-    if (!name || name.length < 5) {
-        const h1Match = html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i);
-        if (h1Match) {
-            const cleanName = h1Match[1].replace(/<[^>]+>/g, '').trim();
-            if (cleanName.length > 5) {
-                name = cleanName;
+    // Method 3: From JSON-LD Product schema
+    if (!name || name.length < 3) {
+        try {
+            const ldJsonRegex = /<script[^>]*type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/gi;
+            let ldMatch;
+            while ((ldMatch = ldJsonRegex.exec(html)) !== null) {
+                try {
+                    const data = JSON.parse(ldMatch[1].trim());
+                    const items = Array.isArray(data) ? data : [data];
+                    for (const item of items) {
+                        if (item['@type'] === 'Product' && item.name) {
+                            name = item.name.trim();
+                            break;
+                        }
+                    }
+                } catch (e) {}
             }
-        }
+        } catch (e) {}
     }
     
-    if (!name || name.length < 3) name = "Auto Ingested Product";
-    return name;
+    return name || 'Unknown Product';
 }
 
-function extractMRP(html) {
-    let mrp = 0;
+function extractSellingPrice(html) {
+    let price = 0;
     
-    // Step 1: Find the SELLING PRICE (current price) from JSON-LD
-    let sellingPrice = 0;
-    let sellingPriceIndex = -1;
+    // Method 1: From JSON-LD offers.price
     try {
         const ldJsonRegex = /<script[^>]*type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/gi;
         let ldMatch;
@@ -426,19 +461,9 @@ function extractMRP(html) {
                     if (item['@type'] === 'Product' && item.offers) {
                         const offers = Array.isArray(item.offers) ? item.offers : [item.offers];
                         for (const offer of offers) {
-                            if (offer.price) {
-                                const sp = parseInt(String(offer.price).replace(/[^0-9]/g, ''), 10);
-                                if (sp > 0 && sp > sellingPrice) {
-                                    sellingPrice = sp;
-                                    // Find position of this price in the HTML - search from start of page
-                                    const priceFormatted = '₹' + sp.toLocaleString('en-IN');
-                                    let idx = html.indexOf(priceFormatted);
-                                    if (idx === -1) {
-                                        // Also try the raw number without comma
-                                        idx = html.indexOf(String(sp));
-                                    }
-                                    if (idx > 0) sellingPriceIndex = idx;
-                                }
+                            if (offer.price && !isNaN(parseInt(offer.price))) {
+                                const num = parseInt(offer.price, 10);
+                                if (num > 0 && (price === 0 || num < price)) price = num;
                             }
                         }
                     }
@@ -447,55 +472,42 @@ function extractMRP(html) {
         }
     } catch (e) {}
     
-    // If JSON-LD didn't give position, find selling price in top section of page
-    if (sellingPriceIndex === -1 && sellingPrice > 0) {
-        const titleIdx = html.indexOf('<title>');
-        const searchArea = html.substring(0, Math.min(html.length, titleIdx + 100000));
-        const priceFormatted = '₹' + sellingPrice.toLocaleString('en-IN');
-        const idx = searchArea.indexOf(priceFormatted);
-        if (idx > 0) sellingPriceIndex = idx;
-        else {
-            // Last resort: just search from start of page
-            const idx2 = html.indexOf(priceFormatted);
-            if (idx2 > 0) sellingPriceIndex = idx2;
+    // Method 2: From rendered price in HTML
+    if (price === 0) {
+        const priceRegex = /(?:₹|&#8377;)\s*([\d,]+)/g;
+        let match;
+        while ((match = priceRegex.exec(html)) !== null) {
+            const num = parseInt(match[1].replace(/[^0-9]/g, ''), 10);
+            if (num > 0 && num < 999999 && (price === 0 || num < price)) {
+                // Skip if this number appears in a strikethrough context
+                const contextStart = Math.max(0, match.index - 200);
+                const context = html.substring(contextStart, match.index);
+                if (!context.includes('line-through') && !context.includes('original-price')) {
+                    price = num;
+                    break;
+                }
+            }
         }
     }
     
-    // Step 2: PROXIMITY-BASED MRP - Find strikethrough price VERY CLOSE to selling price
-    // The real MRP on Flipkart is always shown RIGHT NEXT to the selling price
-    // We look within 3000 chars of the selling price to avoid related product prices
-    if (sellingPrice > 0 && sellingPriceIndex > 0) {
-        const searchStart = Math.max(0, sellingPriceIndex - 3000);
-        const searchEnd = Math.min(html.length, sellingPriceIndex + 3000);
-        const nearArea = html.substring(searchStart, searchEnd);
-        
-        // Find strikethrough prices in this area only
+    return price;
+}
+
+function extractMRP(html) {
+    let mrp = 0;
+    const sellingPrice = extractSellingPrice(html);
+    
+    // Method 1: Find strikethrough prices near the selling price
+    const sellingPriceIndex = html.indexOf('₹' + sellingPrice) || html.indexOf('&#8377;' + sellingPrice) || 0;
+    
+    if (sellingPriceIndex > 0) {
         const nearbyStrikethroughs = [];
-        
-        // Pattern 1: text-decoration-line: line-through
         const stPattern = /text-decoration-line:\s*line-through[^>]*>\s*(?:₹|&#8377;)?\s*([\d,]+)/gi;
         let stMatch;
-        while ((stMatch = stPattern.exec(nearArea)) !== null) {
+        while ((stMatch = stPattern.exec(html)) !== null) {
             const num = parseInt(stMatch[1].replace(/[^0-9]/g, ''), 10);
-            if (num > 0 && num > sellingPrice) {
-                nearbyStrikethroughs.push(num);
-            }
-        }
-        
-        // Pattern 2: text-decoration: line-through (older format)
-        const stPattern2 = /text-decoration:\s*line-through[^>]*>\s*(?:₹|&#8377;)?\s*([\d,]+)/gi;
-        while ((stMatch = stPattern2.exec(nearArea)) !== null) {
-            const num = parseInt(stMatch[1].replace(/[^0-9]/g, ''), 10);
-            if (num > 0 && num > sellingPrice && !nearbyStrikethroughs.includes(num)) {
-                nearbyStrikethroughs.push(num);
-            }
-        }
-        
-        // Pattern 3: Generic strikethrough classes
-        const stPattern3 = /class="[^"]*(?:y31Yq2|M5aNdF|y1HkBA|strike|original)[^"]*"[^>]*>\s*(?:₹|&#8377;)?\s*([\d,]+)/gi;
-        while ((stMatch = stPattern3.exec(nearArea)) !== null) {
-            const num = parseInt(stMatch[1].replace(/[^0-9]/g, ''), 10);
-            if (num > 0 && num > sellingPrice && !nearbyStrikethroughs.includes(num)) {
+            const distance = Math.abs(stMatch.index - sellingPriceIndex);
+            if (num > 0 && num > sellingPrice && distance < 5000) {
                 nearbyStrikethroughs.push(num);
             }
         }
@@ -866,7 +878,7 @@ app.post('/api/fetch-product-details', async (req, res) => {
 });
 
 // ============================================================
-// API Endpoint: Save auto-scraped product
+// API Endpoint: Save auto-scraped product (with Cloudinary)
 // ============================================================
 app.post('/api/save-product-auto', async (req, res) => {
     try {
@@ -876,22 +888,15 @@ app.post('/api/save-product-auto', async (req, res) => {
             return res.status(400).json({ error: 'Name, Category, and Target Selling Price are required.' });
         }
 
-        // Download external images locally
-        const localImages = [];
+        // Upload external images to Cloudinary
+        const cloudinaryUrls = [];
         if (images && images.length > 0) {
-            const imagesDir = path.join(__dirname, 'images');
-            if (!fs.existsSync(imagesDir)) {
-                fs.mkdirSync(imagesDir, { recursive: true });
-            }
             for (let i = 0; i < images.length; i++) {
-                const ext = path.extname(images[i].split('?')[0]) || '.png';
-                const filename = `auto-${Date.now()}-${i}${ext}`;
-                const destPath = path.join(imagesDir, filename);
                 try {
-                    await downloadExternalImage(images[i], destPath);
-                    localImages.push('images/' + filename);
+                    const cloudUrl = await uploadExternalImageToCloudinary(images[i]);
+                    cloudinaryUrls.push(cloudUrl);
                 } catch (err) {
-                    console.error(`Failed to download image ${i}:`, err);
+                    console.error(`Failed to upload image ${i} to Cloudinary:`, err.message);
                 }
             }
         }
@@ -921,8 +926,8 @@ app.post('/api/save-product-auto', async (req, res) => {
             price: parsedPrice,
             original_price: parsedOriginalPrice,
             discount: discount,
-            image: localImages[0] || 'images/default.png',
-            images: localImages,
+            image: cloudinaryUrls[0] || '',
+            images: cloudinaryUrls,
             specs: specs || [],
             createdAt: new Date()
         };
@@ -955,6 +960,7 @@ app.use('/images', express.static(path.join(__dirname, 'images')));
 connectMongo().then(() => {
     app.listen(PORT, () => {
         console.log(`Express server running on port ${PORT}...`);
+        console.log(`Cloudinary cloud: ${cloudinary.config().cloud_name}`);
         console.log(`Browserless endpoint: ${BROWSERLESS_HOST}`);
         console.log(`Admin panel: http://localhost:${PORT}/admin`);
         console.log(`Database: ${DB_NAME} (MongoDB Atlas)`);
