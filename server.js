@@ -937,6 +937,19 @@ app.post('/api/save-product-auto', async (req, res) => {
 });
 
 // ============================================================
+// SERVE STATIC FILES (index.html, admin.html, images)
+// ============================================================
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'index.html'));
+});
+
+app.get('/admin', (req, res) => {
+    res.sendFile(path.join(__dirname, 'admin.html'));
+});
+
+app.use('/images', express.static(path.join(__dirname, 'images')));
+
+// ============================================================
 // START SERVER WITH MONGODB CONNECTION
 // ============================================================
 connectMongo().then(() => {
