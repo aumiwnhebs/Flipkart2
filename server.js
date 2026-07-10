@@ -311,53 +311,55 @@ app.post('/api/add-product-auto', async (req, res) => {
 // BROWSERLESS.IO INTEGRATION - Flipkart Product Scraping
 // ============================================================
 
-const BROWSERLESS_URL = 'https://chrome.browserless.io';
+const BROWSERLESS_HOST = 'https://production-sfo.browserless.io';
 const BROWSERLESS_TOKEN = '2UrB1VJgb4xcfyf0f74fc8b1672cfca0a1acd4e4899050b00';
 
 async function fetchWithBrowserless(url) {
-    const tokenParam = BROWSERLESS_TOKEN ? `?token=${BROWSERLESS_TOKEN}` : '';
-    const endpoint = `${BROWSERLESS_URL}${tokenParam}`;
-    
     console.log(`Fetching page via Browserless: ${url}`);
     
-    // Use Browserless /scrape endpoint to get raw HTML with JavaScript rendered
-    const response = await axios.post(
-        `${BROWSERLESS_URL}/scrape${tokenParam}`,
-        {
-            url: url,
-            waitUntil: 'networkidle2',
-            timeout: 30000,
-            addScript: [{ content: 'window.scrollTo(0, document.body.scrollHeight)' }]
-        },
-        {
-            headers: { 'Content-Type': 'application/json' },
-            timeout: 35000
-        }
-    );
-
-    return response.data.data.html;
-}
-
-async function fetchWithBrowserlessContent(url) {
-    const tokenParam = BROWSERLESS_TOKEN ? `?token=${BROWSERLESS_TOKEN}` : '';
-    const endpoint = `${BROWSERLESS_URL}/content${tokenParam}`;
+    // Try /unblock first (best for anti-bot sites like Flipkart)
+    try {
+        const unblockResponse = await axios.post(
+            `${BROWSERLESS_HOST}/unblock?token=${BROWSERLESS_TOKEN}&proxy=residential`,
+            {
+                url: url,
+                content: true,
+                cookies: false,
+                screenshot: false,
+                browserWSEndpoint: false,
+                waitForTimeout: 5000
+            },
+            {
+                headers: { 'Content-Type': 'application/json' },
+                timeout: 35000
+            }
+        );
+        console.log(`Browserless /unblock returned ${unblockResponse.data.content ? unblockResponse.data.content.length : 0} bytes`);
+        return unblockResponse.data.content || '';
+    } catch (unblockError) {
+        console.log(`Browserless /unblock failed, trying /content: ${unblockError.message}`);
+    }
     
-    console.log(`Fetching page via Browserless Content API: ${url}`);
-    
-    const response = await axios.post(
-        `${BROWSERLESS_URL}/content${tokenParam}`,
-        {
-            url: url,
-            waitFor: 5000,
-            addScript: [{ content: 'window.scrollTo(0, document.body.scrollHeight)' }]
-        },
-        {
-            headers: { 'Content-Type': 'application/json' },
-            timeout: 35000
-        }
-    );
-
-    return response.data;
+    // Fallback to /content endpoint
+    try {
+        const contentResponse = await axios.post(
+            `${BROWSERLESS_HOST}/content?token=${BROWSERLESS_TOKEN}`,
+            {
+                url: url,
+                waitForTimeout: 5000
+            },
+            {
+                headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' },
+                timeout: 35000,
+                responseType: 'text'
+            }
+        );
+        console.log(`Browserless /content returned ${contentResponse.data.length} bytes`);
+        return contentResponse.data;
+    } catch (contentError) {
+        console.error(`Browserless /content also failed: ${contentError.message}`);
+        throw new Error(`Browserless fetch failed via both endpoints: ${contentError.message}`);
+    }
 }
 
 // ============================================================
