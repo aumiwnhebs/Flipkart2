@@ -495,17 +495,24 @@
 			let allProducts = [];
 			let activeCategory = "For You";
 
-			// Fetch products from products.json on load
-			fetch('products.json')
-				.then(res => res.json())
-				.then(data => {
-					allProducts = data;
-					renderCategoryProducts(activeCategory);
-				})
-				.catch(err => {
-					console.log("Error loading products:", err);
-					renderCategoryProducts(activeCategory);
-				});
+// Fetch products from MongoDB via API on load
+				fetch('/api/products')
+					.then(res => res.json())
+					.then(data => {
+						allProducts = data;
+						renderCategoryProducts(activeCategory);
+					})
+					.catch(err => {
+						console.log("Error loading products:", err);
+						// Fallback to products.json if API fails
+						fetch('products.json')
+							.then(res => res.json())
+							.then(data => {
+								allProducts = data;
+								renderCategoryProducts(activeCategory);
+							})
+							.catch(() => renderCategoryProducts(activeCategory));
+					});
 
 			// Render product list inside selected category view (2x2 Grid, Square Cards, Only Name, Image, Price)
 			function renderCategoryProducts(categoryName) {
