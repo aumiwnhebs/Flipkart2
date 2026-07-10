@@ -311,7 +311,7 @@ app.post('/api/add-product-auto', async (req, res) => {
 // BROWSERLESS.IO INTEGRATION - Flipkart Product Scraping
 // ============================================================
 
-const BROWSERLESS_URL = 'wss://chrome.browserless.io';
+const BROWSERLESS_URL = 'https://chrome.browserless.io';
 const BROWSERLESS_TOKEN = '2UrB1VJgb4xcfyf0f74fc8b1672cfca0a1acd4e4899050b00';
 
 async function fetchWithBrowserless(url) {
