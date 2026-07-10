@@ -4,6 +4,7 @@ const multer = require('multer');
 const fs = require('fs');
 const path = require('path');
 const axios = require('axios');
+const { MongoClient } = require('mongodb');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -13,15 +14,100 @@ app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Ensure directories exist
-const imagesDir = path.join(__dirname, 'images');
-if (!fs.existsSync(imagesDir)) {
-    fs.mkdirSync(imagesDir, { recursive: true });
+// ============================================================
+// MONGODB CONNECTION (HARDCODED)
+// ============================================================
+const MONGODB_URI = 'mongodb+srv://rxprime0002_db_user:fImjYrVSrGpkWL8f@cluster0.7j2ih6n.mongodb.net/myflipkart?appName=Cluster0';
+const DB_NAME = 'myflipkart';
+let db;
+let client;
+
+async function connectMongo() {
+    client = new MongoClient(MONGODB_URI);
+    await client.connect();
+    db = client.db(DB_NAME);
+    console.log('✅ Connected to MongoDB: ' + DB_NAME);
+    
+    // Ensure collections exist with indexes
+    await db.collection('products').createIndex({ id: 1 }, { unique: true });
+    await db.collection('upi').createIndex({ key: 1 }, { unique: true });
+    
+    // Initialize UPI document if not exists
+    const upiDoc = await db.collection('upi').findOne({ key: 'upiId' });
+    if (!upiDoc) {
+        await db.collection('upi').insertOne({ key: 'upiId', upiId: 'Not Set' });
+    }
 }
 
+// ============================================================
+// HELPER: Generate unique ID
+// ============================================================
+function generateId() {
+    return Date.now() + Math.floor(Math.random() * 1000);
+}
+
+// ============================================================
+// API Endpoint: Get configuration (current UPI, active products count)
+// ============================================================
+app.get('/api/config', async (req, res) => {
+    try {
+        const upiDoc = await db.collection('upi').findOne({ key: 'upiId' });
+        const productsCount = await db.collection('products').countDocuments();
+        
+        res.json({ 
+            upiId: upiDoc?.upiId || 'Not Set', 
+            productsCount 
+        });
+    } catch (e) {
+        console.error('Error getting config:', e);
+        res.status(500).json({ error: 'Database error' });
+    }
+});
+
+// ============================================================
+// API Endpoint: Update UPI ID
+// ============================================================
+app.post('/api/update-upi', async (req, res) => {
+    const { upiId } = req.body;
+    if (!upiId) {
+        return res.status(400).json({ error: 'UPI ID is required' });
+    }
+
+    try {
+        await db.collection('upi').updateOne(
+            { key: 'upiId' },
+            { $set: { upiId: upiId.trim() } },
+            { upsert: true }
+        );
+        res.json({ success: true, message: 'UPI ID updated successfully' });
+    } catch (e) {
+        console.error('Error updating UPI:', e);
+        res.status(500).json({ error: 'Failed to save UPI ID' });
+    }
+});
+
+// ============================================================
+// API Endpoint: Get all products
+// ============================================================
+app.get('/api/products', async (req, res) => {
+    try {
+        const products = await db.collection('products').find({}).sort({ id: -1 }).toArray();
+        res.json(products);
+    } catch (e) {
+        console.error('Error fetching products:', e);
+        res.json([]);
+    }
+});
+
+// ============================================================
 // Multer storage configuration for product images
+// ============================================================
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
+        const imagesDir = path.join(__dirname, 'images');
+        if (!fs.existsSync(imagesDir)) {
+            fs.mkdirSync(imagesDir, { recursive: true });
+        }
         cb(null, imagesDir);
     },
     filename: (req, file, cb) => {
@@ -32,58 +118,10 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage: storage });
 
-// Serve static assets from myflipkart folder
-app.use(express.static(__dirname));
-
-// Serve Admin Dashboard page
-app.get('/admin', (req, res) => {
-    res.sendFile(path.join(__dirname, 'admin.html'));
-});
-
-// API Endpoint: Get configuration (current UPI, active products count)
-app.get('/api/config', (req, res) => {
-    let upiId = 'Not Set';
-    const upiPath = path.join(__dirname, 'upi.json');
-    try {
-        if (fs.existsSync(upiPath)) {
-            const config = JSON.parse(fs.readFileSync(upiPath, 'utf8'));
-            upiId = config.upiId || 'Not Set';
-        }
-    } catch (e) {
-        console.error('Error reading upi.json:', e);
-    }
-
-    let productsCount = 0;
-    const productsPath = path.join(__dirname, 'products.json');
-    try {
-        if (fs.existsSync(productsPath)) {
-            const products = JSON.parse(fs.readFileSync(productsPath, 'utf8'));
-            productsCount = products.length;
-        }
-    } catch (e) {}
-
-    res.json({ upiId, productsCount });
-});
-
-// API Endpoint: Update UPI ID
-app.post('/api/update-upi', (req, res) => {
-    const { upiId } = req.body;
-    if (!upiId) {
-        return res.status(400).json({ error: 'UPI ID is required' });
-    }
-
-    const upiPath = path.join(__dirname, 'upi.json');
-    try {
-        fs.writeFileSync(upiPath, JSON.stringify({ active: true, upiId: upiId.trim() }, null, 2), 'utf8');
-        res.json({ success: true, message: 'UPI ID updated successfully' });
-    } catch (e) {
-        console.error('Error writing upi.json:', e);
-        res.status(500).json({ error: 'Failed to save UPI ID' });
-    }
-});
-
+// ============================================================
 // API Endpoint: Add new product with multipart form handling
-app.post('/api/add-product', upload.array('images', 10), (req, res) => {
+// ============================================================
+app.post('/api/add-product', upload.array('images', 10), async (req, res) => {
     try {
         const { name, category, price, original_price, specs } = req.body;
         
@@ -119,14 +157,13 @@ app.post('/api/add-product', upload.array('images', 10), (req, res) => {
             try {
                 specsArray = JSON.parse(specs);
             } catch (e) {
-                // Fallback to comma/newline split
                 specsArray = specs.split('\n').map(s => s.trim()).filter(s => s);
             }
         }
 
         const uploadedImages = req.files.map(file => 'images/' + file.filename);
         const newProduct = {
-            id: Date.now(),
+            id: generateId(),
             name: name.trim(),
             category: category.trim(),
             price: parsedPrice,
@@ -134,20 +171,11 @@ app.post('/api/add-product', upload.array('images', 10), (req, res) => {
             discount: discount,
             image: uploadedImages[0],
             images: uploadedImages,
-            specs: specsArray.filter(s => s.trim())
+            specs: specsArray.filter(s => s.trim()),
+            createdAt: new Date()
         };
 
-        const productsPath = path.join(__dirname, 'products.json');
-        let products = [];
-        if (fs.existsSync(productsPath)) {
-            const content = fs.readFileSync(productsPath, 'utf8').trim();
-            if (content) {
-                products = JSON.parse(content);
-            }
-        }
-
-        products.push(newProduct);
-        fs.writeFileSync(productsPath, JSON.stringify(products, null, 4), 'utf8');
+        await db.collection('products').insertOne(newProduct);
 
         res.json({ success: true, message: 'Product added successfully!', product: newProduct });
     } catch (e) {
@@ -156,26 +184,20 @@ app.post('/api/add-product', upload.array('images', 10), (req, res) => {
     }
 });
 
+// ============================================================
 // API Endpoint: Delete product by ID
-app.post('/api/delete-product', (req, res) => {
+// ============================================================
+app.post('/api/delete-product', async (req, res) => {
     const { id } = req.body;
     if (!id) {
         return res.status(400).json({ error: 'Product ID is required.' });
     }
 
-    const productsPath = path.join(__dirname, 'products.json');
     try {
-        let products = [];
-        if (fs.existsSync(productsPath)) {
-            const content = fs.readFileSync(productsPath, 'utf8').trim();
-            if (content) {
-                products = JSON.parse(content);
-            }
-        }
-
-        // Find the product image path to delete it from disk
-        const targetProduct = products.find(p => p.id == id);
+        // Find the product to get image paths
+        const targetProduct = await db.collection('products').findOne({ id: Number(id) || String(id) });
         if (targetProduct) {
+            // Delete local image files if they exist
             const fileList = targetProduct.images || (targetProduct.image ? [targetProduct.image] : []);
             fileList.forEach(img => {
                 const imgPath = path.join(__dirname, img);
@@ -185,8 +207,9 @@ app.post('/api/delete-product', (req, res) => {
             });
         }
 
-        const filtered = products.filter(p => p.id != id);
-        fs.writeFileSync(productsPath, JSON.stringify(filtered, null, 4), 'utf8');
+        // Delete from MongoDB
+        await db.collection('products').deleteOne({ id: Number(id) || String(id) });
+        
         res.json({ success: true, message: 'Product deleted successfully.' });
     } catch (e) {
         console.error('Error deleting product:', e);
@@ -194,24 +217,9 @@ app.post('/api/delete-product', (req, res) => {
     }
 });
 
-// API Endpoint: Get all products
-app.get('/api/products', (req, res) => {
-    const productsPath = path.join(__dirname, 'products.json');
-    try {
-        let products = [];
-        if (fs.existsSync(productsPath)) {
-            const content = fs.readFileSync(productsPath, 'utf8').trim();
-            if (content) {
-                products = JSON.parse(content);
-            }
-        }
-        res.json(products);
-    } catch (e) {
-        res.json([]);
-    }
-});
-
-// Helper function to download external image URLs from CDN and store locally
+// ============================================================
+// Helper function to download external image URLs
+// ============================================================
 function downloadExternalImage(url, dest) {
     return new Promise((resolve, reject) => {
         const file = fs.createWriteStream(dest);
@@ -233,7 +241,9 @@ function downloadExternalImage(url, dest) {
     });
 }
 
-// API Endpoint: Auto-add product from scraped client data
+// ============================================================
+// API Endpoint: Save auto-scraped product
+// ============================================================
 app.post('/api/add-product-auto', async (req, res) => {
     try {
         const { name, mrp, category, sellingPrice, specs, images } = req.body;
@@ -242,9 +252,13 @@ app.post('/api/add-product-auto', async (req, res) => {
             return res.status(400).json({ error: 'Name, Category, and Target Selling Price are required.' });
         }
 
-        // Download external images locally in the background
+        // Download external images locally
         const localImages = [];
         if (images && images.length > 0) {
+            const imagesDir = path.join(__dirname, 'images');
+            if (!fs.existsSync(imagesDir)) {
+                fs.mkdirSync(imagesDir, { recursive: true });
+            }
             for (let i = 0; i < images.length; i++) {
                 const ext = path.extname(images[i].split('?')[0]) || '.png';
                 const filename = `auto-${Date.now()}-${i}${ext}`;
@@ -277,7 +291,7 @@ app.post('/api/add-product-auto', async (req, res) => {
         const discount = parsedOriginalPrice > 0 ? Math.round((pDiff / parsedOriginalPrice) * 100) : 0;
 
         const newProduct = {
-            id: Date.now(),
+            id: generateId(),
             name: name.trim(),
             category: category.trim(),
             price: parsedPrice,
@@ -285,20 +299,11 @@ app.post('/api/add-product-auto', async (req, res) => {
             discount: discount,
             image: localImages[0] || 'images/default.png',
             images: localImages,
-            specs: specs || []
+            specs: specs || [],
+            createdAt: new Date()
         };
 
-        const productsPath = path.join(__dirname, 'products.json');
-        let products = [];
-        if (fs.existsSync(productsPath)) {
-            const content = fs.readFileSync(productsPath, 'utf8').trim();
-            if (content) {
-                products = JSON.parse(content);
-            }
-        }
-
-        products.push(newProduct);
-        fs.writeFileSync(productsPath, JSON.stringify(products, null, 4), 'utf8');
+        await db.collection('products').insertOne(newProduct);
 
         res.json({ success: true, message: 'Product auto-ingested successfully!', product: newProduct });
     } catch (e) {
@@ -363,7 +368,7 @@ async function fetchWithBrowserless(url) {
 }
 
 // ============================================================
-// IMPROVED FLIPKART PRODUCT SCRAPING LOGIC
+// FLIPKART PRODUCT SCRAPING LOGIC
 // ============================================================
 
 function extractProductName(html) {
@@ -497,7 +502,6 @@ function extractMRP(html) {
         
         if (nearbyStrikethroughs.length > 0) {
             // Pick the HIGHEST strikethrough price near selling price
-            // (MRP is always the crossed-out original price which is higher)
             nearbyStrikethroughs.sort((a, b) => b - a);
             mrp = nearbyStrikethroughs[0];
         }
@@ -576,13 +580,11 @@ function extractSpecifications(html) {
                 for (const item of items) {
                     if (item['@type'] === 'Product') {
                         // Parse "include X, Y, Z" pattern from description
-                        // e.g. "include 6 GB RAM, 128 GB ROM, 6000 mAh Battery, 50 MP back camera and 8 MP front camera"
                         if (item.description && item.description.length > 10) {
                             const desc = item.description;
                             const includeMatch = desc.match(/include\s+(.+?)(?:\.|Compare|\s{2})/i);
                             if (includeMatch) {
                                 const specsText = includeMatch[1];
-                                // Split by ', ' and ' and '
                                 const parts = specsText.split(/,\s*|\s+and\s+/);
                                 for (const part of parts) {
                                     const trimmed = part.trim();
@@ -658,12 +660,11 @@ function extractSpecifications(html) {
         }
     }
     
-    // Method 3: Extract from rendered "Key Highlights" section (if JS loaded it)
+    // Method 3: Extract from rendered "Key Highlights" section
     if (specs.length < 6) {
         const khIdx = html.indexOf('Key Highlights');
         if (khIdx > 0) {
             const section = html.substring(khIdx, khIdx + 3000);
-            // Extract text content from divs in this section
             const textItems = section.match(/>([A-Za-z][A-Za-z0-9\.\s\+\-,\/\(\)]{5,80})</g);
             if (textItems) {
                 for (const item of textItems) {
@@ -838,7 +839,7 @@ app.post('/api/fetch-product-details', async (req, res) => {
         } catch (browserlessError) {
             console.error('Browserless fetch failed:', browserlessError.message);
             return res.status(500).json({ 
-                error: 'Failed to fetch page via Browserless. Please check BROWSERLESS_URL and BROWSERLESS_TOKEN environment variables.',
+                error: 'Failed to fetch page via Browserless. Please check the token.',
                 details: browserlessError.message
             });
         }
@@ -864,7 +865,9 @@ app.post('/api/fetch-product-details', async (req, res) => {
     }
 });
 
+// ============================================================
 // API Endpoint: Save auto-scraped product
+// ============================================================
 app.post('/api/save-product-auto', async (req, res) => {
     try {
         const { name, mrp, category, sellingPrice, specs, images } = req.body;
@@ -876,6 +879,10 @@ app.post('/api/save-product-auto', async (req, res) => {
         // Download external images locally
         const localImages = [];
         if (images && images.length > 0) {
+            const imagesDir = path.join(__dirname, 'images');
+            if (!fs.existsSync(imagesDir)) {
+                fs.mkdirSync(imagesDir, { recursive: true });
+            }
             for (let i = 0; i < images.length; i++) {
                 const ext = path.extname(images[i].split('?')[0]) || '.png';
                 const filename = `auto-${Date.now()}-${i}${ext}`;
@@ -908,7 +915,7 @@ app.post('/api/save-product-auto', async (req, res) => {
         const discount = parsedOriginalPrice > 0 ? Math.round((pDiff / parsedOriginalPrice) * 100) : 0;
 
         const newProduct = {
-            id: Date.now(),
+            id: generateId(),
             name: name.trim(),
             category: category.trim(),
             price: parsedPrice,
@@ -916,20 +923,11 @@ app.post('/api/save-product-auto', async (req, res) => {
             discount: discount,
             image: localImages[0] || 'images/default.png',
             images: localImages,
-            specs: specs || []
+            specs: specs || [],
+            createdAt: new Date()
         };
 
-        const productsPath = path.join(__dirname, 'products.json');
-        let products = [];
-        if (fs.existsSync(productsPath)) {
-            const content = fs.readFileSync(productsPath, 'utf8').trim();
-            if (content) {
-                products = JSON.parse(content);
-            }
-        }
-
-        products.push(newProduct);
-        fs.writeFileSync(productsPath, JSON.stringify(products, null, 4), 'utf8');
+        await db.collection('products').insertOne(newProduct);
 
         res.json({ success: true, message: 'Product auto-saved successfully!', product: newProduct });
     } catch (e) {
@@ -938,8 +936,18 @@ app.post('/api/save-product-auto', async (req, res) => {
     }
 });
 
-app.listen(PORT, () => {
-    console.log(`Express server running on port ${PORT}...`);
-    console.log(`Browserless endpoint: ${BROWSERLESS_HOST}`);
-    console.log(`Admin panel: http://localhost:${PORT}/admin`);
+// ============================================================
+// START SERVER WITH MONGODB CONNECTION
+// ============================================================
+connectMongo().then(() => {
+    app.listen(PORT, () => {
+        console.log(`Express server running on port ${PORT}...`);
+        console.log(`Browserless endpoint: ${BROWSERLESS_HOST}`);
+        console.log(`Admin panel: http://localhost:${PORT}/admin`);
+        console.log(`Database: ${DB_NAME} (MongoDB Atlas)`);
+    });
+}).catch(err => {
+    console.error('❌ Failed to connect to MongoDB:', err.message);
+    console.error('Check connection string and network access.');
+    process.exit(1);
 });
