@@ -327,11 +327,11 @@ async function fetchWithBrowserless(url) {
                 cookies: false,
                 screenshot: false,
                 browserWSEndpoint: false,
-                waitForTimeout: 5000
+                waitForTimeout: 10000
             },
             {
                 headers: { 'Content-Type': 'application/json' },
-                timeout: 35000
+                timeout: 40000
             }
         );
         console.log(`Browserless /unblock returned ${unblockResponse.data.content ? unblockResponse.data.content.length : 0} bytes`);
@@ -346,11 +346,11 @@ async function fetchWithBrowserless(url) {
             `${BROWSERLESS_HOST}/content?token=${BROWSERLESS_TOKEN}`,
             {
                 url: url,
-                waitForTimeout: 5000
+                waitForTimeout: 10000
             },
             {
                 headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' },
-                timeout: 35000,
+                timeout: 40000,
                 responseType: 'text'
             }
         );
@@ -407,7 +407,9 @@ function extractProductName(html) {
 function extractMRP(html) {
     let mrp = 0;
     
-    // Method 1: Look for strikethrough price in JSON-LD (most reliable)
+    // Step 1: Find the SELLING PRICE (current price) from JSON-LD
+    let sellingPrice = 0;
+    let sellingPriceIndex = -1;
     try {
         const ldJsonRegex = /<script[^>]*type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/gi;
         let ldMatch;
@@ -419,18 +421,18 @@ function extractMRP(html) {
                     if (item['@type'] === 'Product' && item.offers) {
                         const offers = Array.isArray(item.offers) ? item.offers : [item.offers];
                         for (const offer of offers) {
-                            if (offer.listPrice || offer.highPrice) {
-                                const mrpVal = offer.listPrice || offer.highPrice;
-                                const num = parseInt(String(mrpVal).replace(/[^0-9]/g, ''), 10);
-                                if (num > 0 && num > mrp) mrp = num;
-                            }
-                            if (offer.priceSpecification) {
-                                const specList = Array.isArray(offer.priceSpecification) ? offer.priceSpecification : [offer.priceSpecification];
-                                for (const spec of specList) {
-                                    if (spec.priceType === 'RegularPrice' || spec.priceType === 'SRP') {
-                                        const num = parseInt(String(spec.price).replace(/[^0-9]/g, ''), 10);
-                                        if (num > 0 && num > mrp) mrp = num;
+                            if (offer.price) {
+                                const sp = parseInt(String(offer.price).replace(/[^0-9]/g, ''), 10);
+                                if (sp > 0 && sp > sellingPrice) {
+                                    sellingPrice = sp;
+                                    // Find position of this price in the HTML - search from start of page
+                                    const priceFormatted = '₹' + sp.toLocaleString('en-IN');
+                                    let idx = html.indexOf(priceFormatted);
+                                    if (idx === -1) {
+                                        // Also try the raw number without comma
+                                        idx = html.indexOf(String(sp));
                                     }
+                                    if (idx > 0) sellingPriceIndex = idx;
                                 }
                             }
                         }
@@ -440,67 +442,120 @@ function extractMRP(html) {
         }
     } catch (e) {}
     
-    // Method 2: If JSON-LD didn't give MRP, look for line-through styled text
-    if (mrp === 0) {
-        // Match text-decoration-line: line-through pattern (mobile layout)
-        const lineThroughPatterns = [
-            /style="[^"]*text-decoration-line:\s*line-through[^"]*"[^>]*>\s*(?:₹|&#8377;)?\s*([^<]+)/gi,
-            /style="[^"]*text-decoration:\s*line-through[^"]*"[^>]*>\s*(?:₹|&#8377;)?\s*([^<]+)/gi,
-        ];
-        for (const pattern of lineThroughPatterns) {
-            let match;
-            while ((match = pattern.exec(html)) !== null) {
-                const num = parseInt(match[1].replace(/[^0-9]/g, ''), 10);
-                if (num > 0 && num > mrp) mrp = num;
-            }
+    // If JSON-LD didn't give position, find selling price in top section of page
+    if (sellingPriceIndex === -1 && sellingPrice > 0) {
+        const titleIdx = html.indexOf('<title>');
+        const searchArea = html.substring(0, Math.min(html.length, titleIdx + 100000));
+        const priceFormatted = '₹' + sellingPrice.toLocaleString('en-IN');
+        const idx = searchArea.indexOf(priceFormatted);
+        if (idx > 0) sellingPriceIndex = idx;
+        else {
+            // Last resort: just search from start of page
+            const idx2 = html.indexOf(priceFormatted);
+            if (idx2 > 0) sellingPriceIndex = idx2;
         }
     }
     
-    // Method 3: Fallback - look for price with strikethrough classes
-    if (mrp === 0) {
-        const strikethroughPatterns = [
-            /class="[^"]*(?:y31Yq2|M5aNdF|y1HkBA)[^"]*"\s*style="[^"]*text-decoration[^"]*"[^>]*>\s*(?:₹|&#8377;)?\s*([^<]+)/gi,
-            /class="[^"]*(?:y31Yq2|M5aNdF|y1HkBA)[^"]*"[^>]*>\s*(?:₹|&#8377;)?\s*([^<]+)/gi,
-        ];
-        for (const pattern of strikethroughPatterns) {
-            let match;
-            while ((match = pattern.exec(html)) !== null) {
-                const num = parseInt(match[1].replace(/[^0-9]/g, ''), 10);
-                if (num > 0 && num > mrp) mrp = num;
+    // Step 2: PROXIMITY-BASED MRP - Find strikethrough price VERY CLOSE to selling price
+    // The real MRP on Flipkart is always shown RIGHT NEXT to the selling price
+    // We look within 3000 chars of the selling price to avoid related product prices
+    if (sellingPrice > 0 && sellingPriceIndex > 0) {
+        const searchStart = Math.max(0, sellingPriceIndex - 3000);
+        const searchEnd = Math.min(html.length, sellingPriceIndex + 3000);
+        const nearArea = html.substring(searchStart, searchEnd);
+        
+        // Find strikethrough prices in this area only
+        const nearbyStrikethroughs = [];
+        
+        // Pattern 1: text-decoration-line: line-through
+        const stPattern = /text-decoration-line:\s*line-through[^>]*>\s*(?:₹|&#8377;)?\s*([\d,]+)/gi;
+        let stMatch;
+        while ((stMatch = stPattern.exec(nearArea)) !== null) {
+            const num = parseInt(stMatch[1].replace(/[^0-9]/g, ''), 10);
+            if (num > 0 && num > sellingPrice) {
+                nearbyStrikethroughs.push(num);
             }
+        }
+        
+        // Pattern 2: text-decoration: line-through (older format)
+        const stPattern2 = /text-decoration:\s*line-through[^>]*>\s*(?:₹|&#8377;)?\s*([\d,]+)/gi;
+        while ((stMatch = stPattern2.exec(nearArea)) !== null) {
+            const num = parseInt(stMatch[1].replace(/[^0-9]/g, ''), 10);
+            if (num > 0 && num > sellingPrice && !nearbyStrikethroughs.includes(num)) {
+                nearbyStrikethroughs.push(num);
+            }
+        }
+        
+        // Pattern 3: Generic strikethrough classes
+        const stPattern3 = /class="[^"]*(?:y31Yq2|M5aNdF|y1HkBA|strike|original)[^"]*"[^>]*>\s*(?:₹|&#8377;)?\s*([\d,]+)/gi;
+        while ((stMatch = stPattern3.exec(nearArea)) !== null) {
+            const num = parseInt(stMatch[1].replace(/[^0-9]/g, ''), 10);
+            if (num > 0 && num > sellingPrice && !nearbyStrikethroughs.includes(num)) {
+                nearbyStrikethroughs.push(num);
+            }
+        }
+        
+        if (nearbyStrikethroughs.length > 0) {
+            // Pick the HIGHEST strikethrough price near selling price
+            // (MRP is always the crossed-out original price which is higher)
+            nearbyStrikethroughs.sort((a, b) => b - a);
+            mrp = nearbyStrikethroughs[0];
         }
     }
     
-    // Method 4: Broader fallback - any strikethrough/strike class
+    // Step 3: If proximity search failed, try broader strikethrough scan
     if (mrp === 0) {
-        const genericPatterns = [
-            /class="[^"]*(?:strike|original|_2Tpdn3|_31Qy5e)[^"]*"[^>]*>\s*(?:₹|&#8377;)?\s*([^<]+)/gi,
-            /<span[^>]*style="[^"]*text-decoration[^"]*"[^>]*>\s*(?:₹|&#8377;)?\s*([\d,]+)\s*<\/span>/gi,
-        ];
-        for (const pattern of genericPatterns) {
-            let match;
-            while ((match = pattern.exec(html)) !== null) {
-                const num = parseInt(match[1].replace(/[^0-9]/g, ''), 10);
-                if (num > 0 && num > mrp) mrp = num;
+        const allStrikethroughs = [];
+        const stPattern = /text-decoration-line:\s*line-through[^>]*>\s*(?:₹|&#8377;)?\s*([\d,]+)/gi;
+        let stMatch;
+        while ((stMatch = stPattern.exec(html)) !== null) {
+            const num = parseInt(stMatch[1].replace(/[^0-9]/g, ''), 10);
+            if (num > 0 && num > sellingPrice) {
+                allStrikethroughs.push({ price: num, index: stMatch.index });
             }
+        }
+        
+        const stPattern2 = /text-decoration:\s*line-through[^>]*>\s*(?:₹|&#8377;)?\s*([\d,]+)/gi;
+        while ((stMatch = stPattern2.exec(html)) !== null) {
+            const num = parseInt(stMatch[1].replace(/[^0-9]/g, ''), 10);
+            if (num > 0 && num > sellingPrice) {
+                allStrikethroughs.push({ price: num, index: stMatch.index });
+            }
+        }
+        
+        // Sort by distance from selling price, pick closest
+        if (allStrikethroughs.length > 0) {
+            allStrikethroughs.sort((a, b) => 
+                Math.abs(a.index - sellingPriceIndex) - Math.abs(b.index - sellingPriceIndex)
+            );
+            mrp = allStrikethroughs[0].price;
         }
     }
     
-    // Method 5: Last resort - find any price above the selling price in the page
+    // Step 4: If still no MRP, try JSON-LD listPrice
     if (mrp === 0) {
-        const allPriceMatches = html.match(/(?:₹|&#8377;)\s*([\d,]+)/g);
-        if (allPriceMatches) {
-            const prices = allPriceMatches.map(p => parseInt(p.replace(/[^0-9]/g, ''), 10)).filter(p => p > 0);
-            if (prices.length > 1) {
-                // MRP is typically the highest price that's crossed out
-                // Look for the highest price value on the page
-                prices.sort((a, b) => b - a);
-                // Find a price that appears near strikethrough styling
-                const nearStrike = html.match(new RegExp('(?:₹|&#8377;)\\s*' + prices[0].toLocaleString('en-IN'), 'i'));
-                if (nearStrike) mrp = prices[0];
-                else if (prices.length > 1) mrp = prices[0];
+        try {
+            const ldJsonRegex = /<script[^>]*type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/gi;
+            let ldMatch;
+            while ((ldMatch = ldJsonRegex.exec(html)) !== null) {
+                try {
+                    const data = JSON.parse(ldMatch[1].trim());
+                    const items = Array.isArray(data) ? data : [data];
+                    for (const item of items) {
+                        if (item['@type'] === 'Product' && item.offers) {
+                            const offers = Array.isArray(item.offers) ? item.offers : [item.offers];
+                            for (const offer of offers) {
+                                if (offer.listPrice || offer.highPrice) {
+                                    const mrpVal = offer.listPrice || offer.highPrice;
+                                    const num = parseInt(String(mrpVal).replace(/[^0-9]/g, ''), 10);
+                                    if (num > 0 && num > mrp) mrp = num;
+                                }
+                            }
+                        }
+                    }
+                } catch (e) {}
             }
-        }
+        } catch (e) {}
     }
     
     return mrp;
@@ -508,8 +563,9 @@ function extractMRP(html) {
 
 function extractSpecifications(html) {
     const specs = [];
+    const seen = new Set();
     
-    // Method 1: Extract from JSON-LD structured data (product specifications)
+    // Method 1: Extract specs from JSON-LD Product description (MOST RELIABLE for highlights)
     try {
         const ldJsonRegex = /<script[^>]*type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/gi;
         let ldMatch;
@@ -519,17 +575,63 @@ function extractSpecifications(html) {
                 const items = Array.isArray(data) ? data : [data];
                 for (const item of items) {
                     if (item['@type'] === 'Product') {
-                        // Look for product description or additionalProperty
+                        // Parse "include X, Y, Z" pattern from description
+                        // e.g. "include 6 GB RAM, 128 GB ROM, 6000 mAh Battery, 50 MP back camera and 8 MP front camera"
                         if (item.description && item.description.length > 10) {
-                            // Description often contains specs in a formatted way
+                            const desc = item.description;
+                            const includeMatch = desc.match(/include\s+(.+?)(?:\.|Compare|\s{2})/i);
+                            if (includeMatch) {
+                                const specsText = includeMatch[1];
+                                // Split by ', ' and ' and '
+                                const parts = specsText.split(/,\s*|\s+and\s+/);
+                                for (const part of parts) {
+                                    const trimmed = part.trim();
+                                    if (trimmed.length > 5 && trimmed.length < 120 && !seen.has(trimmed)) {
+                                        specs.push(trimmed);
+                                        seen.add(trimmed);
+                                    }
+                                }
+                            }
+                            // Also extract individual spec phrases
+                            const specPhrases = desc.match(/\d+\s*(?:GB|MB|mAh|MP|inch|inches|Hz|W)\s*[A-Za-z]+(?:\s+[a-z]+)?/g);
+                            if (specPhrases) {
+                                for (const phrase of specPhrases) {
+                                    const trimmed = phrase.trim();
+                                    if (trimmed.length > 5 && !seen.has(trimmed)) {
+                                        specs.push(trimmed);
+                                        seen.add(trimmed);
+                                    }
+                                }
+                            }
                         }
-                        // Look for additionalProperty in structured data
+                        // Extract brand, color from Product
+                        if (item.brand && item.brand.name && !seen.has(`Brand: ${item.brand.name}`)) {
+                            specs.push(`Brand: ${item.brand.name}`);
+                            seen.add(`Brand: ${item.brand.name}`);
+                        }
+                        if (item.color && !seen.has(`Color: ${item.color}`)) {
+                            specs.push(`Color: ${item.color}`);
+                            seen.add(`Color: ${item.color}`);
+                        }
+                        // Extract rating
+                        if (item.aggregateRating) {
+                            const rating = `Rating: ${item.aggregateRating.ratingValue} / 5 (${item.aggregateRating.ratingCount || item.aggregateRating.reviewCount || ''} reviews)`;
+                            if (!seen.has(rating)) {
+                                specs.push(rating);
+                                seen.add(rating);
+                            }
+                        }
+                        // Also check for additionalProperty
                         if (item.additionalProperty && Array.isArray(item.additionalProperty)) {
                             item.additionalProperty.forEach(prop => {
                                 const label = prop.name || prop.propertyName || '';
                                 const value = prop.value || '';
                                 if (label && value) {
-                                    specs.push(`${label}: ${value}`);
+                                    const specStr = `${label}: ${value}`;
+                                    if (!seen.has(specStr)) {
+                                        specs.push(specStr);
+                                        seen.add(specStr);
+                                    }
                                 }
                             });
                         }
@@ -539,50 +641,44 @@ function extractSpecifications(html) {
         }
     } catch (e) {}
     
-    // Method 2: Extract from Flipkart's "Specifications" section in HTML
-    // Look for spec label-value pairs
+    // Method 2: Extract from Flipkart's rendered "Specifications" section in HTML
     const specLabelPattern = /<div[^>]*class="[^"]*specification[^"]*"[^>]*>([\s\S]*?)<\/div>/gi;
     let specMatch;
-    const seenSpecs = new Set();
     while ((specMatch = specLabelPattern.exec(html)) !== null) {
         const innerHtml = specMatch[1];
-        // Extract label and value
         const labelMatch = innerHtml.match(/<div[^>]*class="[^"]*(?:specName|_1v1JvX)[^"]*"[^>]*>([\s\S]*?)<\/div>/i);
         const valueMatch = innerHtml.match(/<div[^>]*class="[^"]*(?:specValue|_341NwK|_1vC4OE)[^"]*"[^>]*>([\s\S]*?)<\/div>/i);
         if (labelMatch && valueMatch) {
             const label = labelMatch[1].replace(/<[^>]+>/g, '').trim();
             const value = valueMatch[1].replace(/<[^>]+>/g, '').trim();
-            if (label && value && !seenSpecs.has(label)) {
+            if (label && value && !seen.has(label)) {
                 specs.push(`${label}: ${value}`);
-                seenSpecs.add(label);
+                seen.add(label);
             }
         }
     }
     
-    // Method 3: Extract highlights from the "Highlights" section
-    if (specs.length < 3) {
-        const highlightPatterns = [
-            /<li class="[^"]*(?:_21A10W|_2cM2V8|highlight)[^"]*">([^<]+)<\/li>/gi,
-            /<li class="[^"]*">([\s\S]{10,100})<\/li>/gi,
-            /<span[^>]*class="[^"]*(?:specHighlight|_1qBb9v)[^"]*"[^>]*>([\s\S]*?)<\/span>/gi,
-        ];
-        
-        for (const pattern of highlightPatterns) {
-            let hMatch;
-            let count = 0;
-            while ((hMatch = pattern.exec(html)) !== null && count < 10) {
-                const text = hMatch[1].replace(/<[^>]+>/g, '').trim();
-                if (text.length > 5 && text.length < 120 && !specs.some(s => s.includes(text.substring(0, 15)))) {
-                    specs.push(text);
-                    count++;
+    // Method 3: Extract from rendered "Key Highlights" section (if JS loaded it)
+    if (specs.length < 6) {
+        const khIdx = html.indexOf('Key Highlights');
+        if (khIdx > 0) {
+            const section = html.substring(khIdx, khIdx + 3000);
+            // Extract text content from divs in this section
+            const textItems = section.match(/>([A-Za-z][A-Za-z0-9\.\s\+\-,\/\(\)]{5,80})</g);
+            if (textItems) {
+                for (const item of textItems) {
+                    const clean = item.slice(1, -1).trim();
+                    if (clean && clean !== 'Key Highlights' && clean.length > 5 && !seen.has(clean)) {
+                        specs.push(clean);
+                        seen.add(clean);
+                    }
                 }
             }
-            if (specs.length >= 5) break;
         }
     }
     
-    // Method 4: Extract from spec table/grid pattern (common in mobile/electronics)
-    if (specs.length < 3) {
+    // Method 4: Extract from spec table/grid pattern
+    if (specs.length < 4) {
         const specRowPattern = /<div[^>]*class="[^"]*(?:spec-row|row)[^"]*"[^>]*>([\s\S]*?)<\/div>/gi;
         let rowMatch;
         while ((rowMatch = specRowPattern.exec(html)) !== null && specs.length < 10) {
@@ -592,17 +688,18 @@ function extractSpecifications(html) {
             if (keyMatch && valMatch && valMatch.length > 1) {
                 const key = keyMatch[1].trim();
                 const val = valMatch[1].replace(/<[^>]+>/g, '').trim();
-                if (!specs.some(s => s.includes(key))) {
+                if (!seen.has(key)) {
                     specs.push(`${key}: ${val}`);
+                    seen.add(key);
                 }
             }
         }
     }
     
     // Method 5: Extract from common spec key-value patterns in page
-    if (specs.length < 2) {
+    if (specs.length < 4) {
         const commonKeys = [
-            "Display Size", "Screen Size", "Resolution", "Processor", 
+            "Display Size", "Screen Size", "Resolution", "Processor",
             "RAM", "Internal Storage", "ROM", "Battery", "Battery Capacity",
             "Camera", "Primary Camera", "Front Camera", "Secondary Camera",
             "Brand", "Color", "Weight", "Network", "SIM"
@@ -616,23 +713,24 @@ function extractSpecifications(html) {
             const match = html.match(pattern);
             if (match) {
                 const val = match[1].replace(/<[^>]+>/g, '').trim();
-                if (val && !specs.some(s => s.includes(key))) {
+                if (val && !seen.has(key)) {
                     specs.push(`${key}: ${val}`);
+                    seen.add(key);
                 }
             }
         });
     }
     
     // Method 6: Extract from <meta> tags for additional specs
-    if (specs.length < 2) {
+    if (specs.length < 3) {
         const metaSpecs = html.match(/<meta[^>]+name=["']description["'][^>]+content=["']([^'"]+)["']/i);
         if (metaSpecs) {
             const desc = metaSpecs[1];
-            // Split description by commas or pipes to get individual specs
             const descSpecs = desc.split(/[,|]/).map(s => s.trim()).filter(s => s.length > 3 && s.length < 100);
             descSpecs.forEach(s => {
-                if (!specs.some(sp => sp.includes(s.substring(0, 10)))) {
+                if (!seen.has(s)) {
                     specs.push(s);
+                    seen.add(s);
                 }
             });
         }
