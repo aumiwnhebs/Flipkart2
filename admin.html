@@ -737,7 +737,7 @@
 
                     // Show loading state (rolling spinner effect)
                     autoSubmitBtn.disabled = true;
-                    autoSubmitBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Headless Chrome launching & extracting...';
+                    autoSubmitBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Fetching via Browserless.io & extracting...';
                     
                     const payload = {
                         url: document.getElementById('auto-url').value.trim()
@@ -764,14 +764,15 @@
                             document.getElementById('prev-mrp').value = data.mrp || Math.round(document.getElementById('auto-price').value * 1.5);
                             document.getElementById('prev-price-show').value = '₹' + parseInt(document.getElementById('auto-price').value, 10).toLocaleString('en-IN');
                             
-                            // Render Images Grid Preview
+                    // Render Images Grid Preview
                             const imgGrid = document.getElementById('prev-images-grid');
                             imgGrid.innerHTML = '';
+                            document.getElementById('prev-images-grid').previousElementSibling.innerHTML = 'Extracted Images (' + data.images.length + ' found)';
                             data.images.forEach((img, index) => {
                                 const imgWrapper = document.createElement('div');
                                 imgWrapper.style.position = 'relative';
                                 imgWrapper.innerHTML = `
-                                    <img src="${img}" style="width:70px; height:70px; object-fit:contain; border:1px solid #bfdbfe; border-radius:6px; padding:2px; background:#fff;">
+                                    <img src="${img}" style="width:70px; height:70px; object-fit:contain; border:1px solid #bfdbfe; border-radius:6px; padding:2px; background:#fff;" onerror="this.parentElement.style.display='none'">
                                     <span style="position:absolute; bottom:2px; right:2px; background:rgba(0,0,0,0.6); color:#fff; font-size:9px; padding:1px 4px; border-radius:3px;">Img ${index+1}</span>
                                 `;
                                 imgGrid.appendChild(imgWrapper);
@@ -787,13 +788,15 @@
                                     const specRow = document.createElement('div');
                                     specRow.style.display = 'flex';
                                     specRow.style.justifyContent = 'space-between';
-                                    specRow.style.alignItems = 'center';
+                                    specRow.style.alignItems = 'flex-start';
                                     specRow.style.gap = '8px';
-                                    specRow.style.padding = '4px 0';
+                                    specRow.style.padding = '6px 8px';
                                     specRow.style.borderBottom = '1px solid #f1f5f9';
+                                    specRow.style.background = idx % 2 === 0 ? '#f8fafc' : '#fff';
+                                    specRow.style.borderRadius = '4px';
                                     specRow.innerHTML = `
-                                        <span class="prev-spec-text" style="font-size:12px; color:var(--text-dark); flex:1;">${spec}</span>
-                                        <button type="button" class="spec-remove-btn" onclick="this.parentElement.remove()" style="font-size:12px; color:var(--danger); padding:2px;"><i class="fa-solid fa-trash"></i></button>
+                                        <span class="prev-spec-text" style="font-size:12px; color:var(--text-dark); flex:1; word-wrap:break-word;">${spec}</span>
+                                        <button type="button" class="spec-remove-btn" onclick="this.parentElement.remove()" style="font-size:12px; color:var(--danger); padding:2px; flex-shrink:0;"><i class="fa-solid fa-trash"></i></button>
                                     `;
                                     specsList.appendChild(specRow);
                                 });
@@ -803,7 +806,11 @@
                             previewCard.style.display = 'block';
                             previewCard.scrollIntoView({ behavior: 'smooth' });
                         } else {
-                            showAlert(data.error || 'Failed to extract product details.', 'danger');
+                            if (data.error) {
+                                showAlert(data.error, 'danger');
+                            } else {
+                                showAlert('Failed to extract product details.', 'danger');
+                            }
                         }
                     })
                     .catch((err) => {
@@ -822,7 +829,7 @@
                     
                     // Show loading status
                     confirmSaveBtn.disabled = true;
-                    confirmSaveBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Downloading images & writing to database...';
+                    confirmSaveBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Downloading images & saving product...';
 
                     // Gather potentially edited name and MRP from preview form
                     const finalName = document.getElementById('prev-name').value.trim();

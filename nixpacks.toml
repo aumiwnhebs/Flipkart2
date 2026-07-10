@@ -1,6 +1,11 @@
 [phases.setup]
-nixPkgs = ["nodejs-18_x", "chromium"]
+nixPkgs = ["nodejs_18"]
 
-[env]
-PUPPETEER_SKIP_CHROMIUM_DOWNLOAD = "true"
+[phases.install]
+cmds = ["npm install"]
 
+[phases.build]
+cmds = ["echo 'Build complete'"]
+
+[start]
+cmd = "npm start"

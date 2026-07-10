@@ -3,15 +3,15 @@ const cors = require('cors');
 const multer = require('multer');
 const fs = require('fs');
 const path = require('path');
-const { execFile } = require('child_process');
+const axios = require('axios');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 // Enable CORS and body parsing
 app.use(cors());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Ensure directories exist
 const imagesDir = path.join(__dirname, 'images');
@@ -32,18 +32,8 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage: storage });
 
-// Serve static assets from root folder
+// Serve static assets from myflipkart folder
 app.use(express.static(__dirname));
-
-// Default home route
-app.get('/', (req, res) => {
-    const indexPath = path.join(__dirname, 'index.html');
-    if (fs.existsSync(indexPath)) {
-        res.sendFile(indexPath);
-    } else {
-        res.send('Server is running!');
-    }
-});
 
 // Serve Admin Dashboard page
 app.get('/admin', (req, res) => {
@@ -112,20 +102,24 @@ app.post('/api/add-product', upload.array('images', 10), (req, res) => {
             return res.status(400).json({ error: 'Invalid selling price numeric format.' });
         }
 
+        // Apply same auto-swap rule: MRP should be higher than Selling Price
         if (parsedOriginalPrice < parsedPrice) {
             const temp = parsedPrice;
             parsedPrice = parsedOriginalPrice;
             parsedOriginalPrice = temp;
         }
 
+        // Calculate discount
         const pDiff = parsedOriginalPrice - parsedPrice;
         const discount = parsedOriginalPrice > 0 ? Math.round((pDiff / parsedOriginalPrice) * 100) : 0;
 
+        // Parse specifications
         let specsArray = [];
         if (specs) {
             try {
                 specsArray = JSON.parse(specs);
             } catch (e) {
+                // Fallback to comma/newline split
                 specsArray = specs.split('\n').map(s => s.trim()).filter(s => s);
             }
         }
@@ -179,6 +173,7 @@ app.post('/api/delete-product', (req, res) => {
             }
         }
 
+        // Find the product image path to delete it from disk
         const targetProduct = products.find(p => p.id == id);
         if (targetProduct) {
             const fileList = targetProduct.images || (targetProduct.image ? [targetProduct.image] : []);
@@ -216,7 +211,7 @@ app.get('/api/products', (req, res) => {
     }
 });
 
-// Helper function to download external image URLs
+// Helper function to download external image URLs from CDN and store locally
 function downloadExternalImage(url, dest) {
     return new Promise((resolve, reject) => {
         const file = fs.createWriteStream(dest);
@@ -247,6 +242,7 @@ app.post('/api/add-product-auto', async (req, res) => {
             return res.status(400).json({ error: 'Name, Category, and Target Selling Price are required.' });
         }
 
+        // Download external images locally in the background
         const localImages = [];
         if (images && images.length > 0) {
             for (let i = 0; i < images.length; i++) {
@@ -269,12 +265,14 @@ app.post('/api/add-product-auto', async (req, res) => {
             return res.status(400).json({ error: 'Invalid selling price numeric format.' });
         }
 
+        // Apply auto-swap rule: MRP should be higher than Selling Price
         if (parsedOriginalPrice < parsedPrice) {
             const temp = parsedPrice;
             parsedPrice = parsedOriginalPrice;
             parsedOriginalPrice = temp;
         }
 
+        // Calculate discount
         const pDiff = parsedOriginalPrice - parsedPrice;
         const discount = parsedOriginalPrice > 0 ? Math.round((pDiff / parsedOriginalPrice) * 100) : 0;
 
@@ -309,66 +307,343 @@ app.post('/api/add-product-auto', async (req, res) => {
     }
 });
 
-// Helper: Dynamically find Chromium executable path across Nixpacks/Ubuntu
-function getChromePath() {
-    const paths = [
-        "/nix/var/nix/profiles/default/bin/chromium",
-        "/root/.nix-profile/bin/chromium",
-        "/usr/bin/chromium",
-        "/usr/bin/chromium-browser",
-        "/usr/bin/google-chrome-stable"
-    ];
-    for (const p of paths) {
-        if (fs.existsSync(p)) return p;
-    }
-    return 'chromium';
+// ============================================================
+// BROWSERLESS.IO INTEGRATION - Flipkart Product Scraping
+// ============================================================
+
+const BROWSERLESS_URL = 'wss://chrome.browserless.io';
+const BROWSERLESS_TOKEN = '2UrB1VJgb4xcfyf0f74fc8b1672cfca0a1acd4e4899050b00';
+
+async function fetchWithBrowserless(url) {
+    const tokenParam = BROWSERLESS_TOKEN ? `?token=${BROWSERLESS_TOKEN}` : '';
+    const endpoint = `${BROWSERLESS_URL}${tokenParam}`;
+    
+    console.log(`Fetching page via Browserless: ${url}`);
+    
+    // Use Browserless /scrape endpoint to get raw HTML with JavaScript rendered
+    const response = await axios.post(
+        `${BROWSERLESS_URL}/scrape${tokenParam}`,
+        {
+            url: url,
+            waitUntil: 'networkidle2',
+            timeout: 30000,
+            addScript: [{ content: 'window.scrollTo(0, document.body.scrollHeight)' }]
+        },
+        {
+            headers: { 'Content-Type': 'application/json' },
+            timeout: 35000
+        }
+    );
+
+    return response.data.data.html;
 }
 
-// Scraper Endpoint
-app.post('/api/fetch-product-details', (req, res) => {
-    const { url } = req.body;
-    if (!url) {
-        return res.status(400).json({ error: 'URL is required.' });
+async function fetchWithBrowserlessContent(url) {
+    const tokenParam = BROWSERLESS_TOKEN ? `?token=${BROWSERLESS_TOKEN}` : '';
+    const endpoint = `${BROWSERLESS_URL}/content${tokenParam}`;
+    
+    console.log(`Fetching page via Browserless Content API: ${url}`);
+    
+    const response = await axios.post(
+        `${BROWSERLESS_URL}/content${tokenParam}`,
+        {
+            url: url,
+            waitFor: 5000,
+            addScript: [{ content: 'window.scrollTo(0, document.body.scrollHeight)' }]
+        },
+        {
+            headers: { 'Content-Type': 'application/json' },
+            timeout: 35000
+        }
+    );
+
+    return response.data;
+}
+
+// ============================================================
+// IMPROVED FLIPKART PRODUCT SCRAPING LOGIC
+// ============================================================
+
+function extractProductName(html) {
+    let name = '';
+    
+    // Method 1: From <title> tag
+    const titleMatch = html.match(/<title>([^<]+)<\/title>/i);
+    if (titleMatch) {
+        name = titleMatch[1].trim()
+            .replace(/\s*Online\s+at\s+Best\s+Price.*$/i, '')
+            .replace(/\s*-\s*Buy\s+.*$/i, '')
+            .replace(/\s*-\s*Portronics\s*:.*$/i, '')
+            .replace(/\s*:\s*Flipkart\.com.*$/i, '')
+            .replace(/\s*-?\s*Buy\s+Online\s+.*$/i, '')
+            .trim();
     }
-
-    const chromePath = getChromePath();
-
-    const args = [
-        '--headless',
-        '--no-sandbox',
-        '--disable-gpu',
-        '--disable-setuid-sandbox',
-        '--virtual-time-budget=10000',
-        '--dump-dom',
-        url
-    ];
-
-    execFile(chromePath, args, { maxBuffer: 1024 * 1024 * 10 }, (error, stdout, stderr) => {
-        if (error) {
-            console.error('Scraper Error:', error);
-            return res.status(500).json({ error: 'Failed to retrieve page contents.' });
+    
+    // Method 2: From OG title meta tag
+    if (!name || name.length < 5) {
+        const ogTitle = html.match(/<meta[^>]+property=["']og:title["'][^>]+content=["']([^'"]+)["']/i);
+        if (ogTitle) {
+            name = ogTitle[1].trim().replace(/\s*-\s*Flipkart\.com.*$/i, '').trim();
         }
-
-        const html = stdout;
-
-        let name = '';
-        const titleMatch = html.match(/<title>([^<]+)<\/title>/i);
-        if (titleMatch) {
-            name = titleMatch[1].trim()
-                .replace(/\s*Online\s+at\s+Best\s+Price.*$/i, '')
-                .replace(/\s*-\s*Buy\s+.*$/i, '')
-                .replace(/\s*:\s*Flipkart\.com.*$/i, '')
-                .trim();
+    }
+    
+    // Method 3: From h1 with class matching Flipkart product title pattern
+    if (!name || name.length < 5) {
+        const h1Match = html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i);
+        if (h1Match) {
+            const cleanName = h1Match[1].replace(/<[^>]+>/g, '').trim();
+            if (cleanName.length > 5) {
+                name = cleanName;
+            }
         }
-        if (!name) name = "Auto Ingested Product";
+    }
+    
+    if (!name || name.length < 3) name = "Auto Ingested Product";
+    return name;
+}
 
-        let mrp = 0;
-        const lineThroughMatch = html.match(/style="[^"]*text-decoration(?:-line)?:\\s*line-through[^"]*"[^>]*>\\s*(?:₹|&#8377;)?\\s*([^<]+)<\/div>/i);
-        if (lineThroughMatch) {
-            mrp = parseInt(lineThroughMatch[1].replace(/[^0-9]/g, ''), 10) || 0;
+function extractMRP(html) {
+    let mrp = 0;
+    
+    // Method 1: Look for strikethrough price in JSON-LD (most reliable)
+    try {
+        const ldJsonRegex = /<script[^>]*type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/gi;
+        let ldMatch;
+        while ((ldMatch = ldJsonRegex.exec(html)) !== null) {
+            try {
+                const data = JSON.parse(ldMatch[1].trim());
+                const items = Array.isArray(data) ? data : [data];
+                for (const item of items) {
+                    if (item['@type'] === 'Product' && item.offers) {
+                        const offers = Array.isArray(item.offers) ? item.offers : [item.offers];
+                        for (const offer of offers) {
+                            if (offer.listPrice || offer.highPrice) {
+                                const mrpVal = offer.listPrice || offer.highPrice;
+                                const num = parseInt(String(mrpVal).replace(/[^0-9]/g, ''), 10);
+                                if (num > 0 && num > mrp) mrp = num;
+                            }
+                            if (offer.priceSpecification) {
+                                const specList = Array.isArray(offer.priceSpecification) ? offer.priceSpecification : [offer.priceSpecification];
+                                for (const spec of specList) {
+                                    if (spec.priceType === 'RegularPrice' || spec.priceType === 'SRP') {
+                                        const num = parseInt(String(spec.price).replace(/[^0-9]/g, ''), 10);
+                                        if (num > 0 && num > mrp) mrp = num;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            } catch (e) {}
         }
+    } catch (e) {}
+    
+    // Method 2: If JSON-LD didn't give MRP, look for line-through styled text
+    if (mrp === 0) {
+        // Match text-decoration-line: line-through pattern (mobile layout)
+        const lineThroughPatterns = [
+            /style="[^"]*text-decoration-line:\s*line-through[^"]*"[^>]*>\s*(?:₹|&#8377;)?\s*([^<]+)/gi,
+            /style="[^"]*text-decoration:\s*line-through[^"]*"[^>]*>\s*(?:₹|&#8377;)?\s*([^<]+)/gi,
+        ];
+        for (const pattern of lineThroughPatterns) {
+            let match;
+            while ((match = pattern.exec(html)) !== null) {
+                const num = parseInt(match[1].replace(/[^0-9]/g, ''), 10);
+                if (num > 0 && num > mrp) mrp = num;
+            }
+        }
+    }
+    
+    // Method 3: Fallback - look for price with strikethrough classes
+    if (mrp === 0) {
+        const strikethroughPatterns = [
+            /class="[^"]*(?:y31Yq2|M5aNdF|y1HkBA)[^"]*"\s*style="[^"]*text-decoration[^"]*"[^>]*>\s*(?:₹|&#8377;)?\s*([^<]+)/gi,
+            /class="[^"]*(?:y31Yq2|M5aNdF|y1HkBA)[^"]*"[^>]*>\s*(?:₹|&#8377;)?\s*([^<]+)/gi,
+        ];
+        for (const pattern of strikethroughPatterns) {
+            let match;
+            while ((match = pattern.exec(html)) !== null) {
+                const num = parseInt(match[1].replace(/[^0-9]/g, ''), 10);
+                if (num > 0 && num > mrp) mrp = num;
+            }
+        }
+    }
+    
+    // Method 4: Broader fallback - any strikethrough/strike class
+    if (mrp === 0) {
+        const genericPatterns = [
+            /class="[^"]*(?:strike|original|_2Tpdn3|_31Qy5e)[^"]*"[^>]*>\s*(?:₹|&#8377;)?\s*([^<]+)/gi,
+            /<span[^>]*style="[^"]*text-decoration[^"]*"[^>]*>\s*(?:₹|&#8377;)?\s*([\d,]+)\s*<\/span>/gi,
+        ];
+        for (const pattern of genericPatterns) {
+            let match;
+            while ((match = pattern.exec(html)) !== null) {
+                const num = parseInt(match[1].replace(/[^0-9]/g, ''), 10);
+                if (num > 0 && num > mrp) mrp = num;
+            }
+        }
+    }
+    
+    // Method 5: Last resort - find any price above the selling price in the page
+    if (mrp === 0) {
+        const allPriceMatches = html.match(/(?:₹|&#8377;)\s*([\d,]+)/g);
+        if (allPriceMatches) {
+            const prices = allPriceMatches.map(p => parseInt(p.replace(/[^0-9]/g, ''), 10)).filter(p => p > 0);
+            if (prices.length > 1) {
+                // MRP is typically the highest price that's crossed out
+                // Look for the highest price value on the page
+                prices.sort((a, b) => b - a);
+                // Find a price that appears near strikethrough styling
+                const nearStrike = html.match(new RegExp('(?:₹|&#8377;)\\s*' + prices[0].toLocaleString('en-IN'), 'i'));
+                if (nearStrike) mrp = prices[0];
+                else if (prices.length > 1) mrp = prices[0];
+            }
+        }
+    }
+    
+    return mrp;
+}
 
-        let images = [];
+function extractSpecifications(html) {
+    const specs = [];
+    
+    // Method 1: Extract from JSON-LD structured data (product specifications)
+    try {
+        const ldJsonRegex = /<script[^>]*type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/gi;
+        let ldMatch;
+        while ((ldMatch = ldJsonRegex.exec(html)) !== null) {
+            try {
+                const data = JSON.parse(ldMatch[1].trim());
+                const items = Array.isArray(data) ? data : [data];
+                for (const item of items) {
+                    if (item['@type'] === 'Product') {
+                        // Look for product description or additionalProperty
+                        if (item.description && item.description.length > 10) {
+                            // Description often contains specs in a formatted way
+                        }
+                        // Look for additionalProperty in structured data
+                        if (item.additionalProperty && Array.isArray(item.additionalProperty)) {
+                            item.additionalProperty.forEach(prop => {
+                                const label = prop.name || prop.propertyName || '';
+                                const value = prop.value || '';
+                                if (label && value) {
+                                    specs.push(`${label}: ${value}`);
+                                }
+                            });
+                        }
+                    }
+                }
+            } catch (e) {}
+        }
+    } catch (e) {}
+    
+    // Method 2: Extract from Flipkart's "Specifications" section in HTML
+    // Look for spec label-value pairs
+    const specLabelPattern = /<div[^>]*class="[^"]*specification[^"]*"[^>]*>([\s\S]*?)<\/div>/gi;
+    let specMatch;
+    const seenSpecs = new Set();
+    while ((specMatch = specLabelPattern.exec(html)) !== null) {
+        const innerHtml = specMatch[1];
+        // Extract label and value
+        const labelMatch = innerHtml.match(/<div[^>]*class="[^"]*(?:specName|_1v1JvX)[^"]*"[^>]*>([\s\S]*?)<\/div>/i);
+        const valueMatch = innerHtml.match(/<div[^>]*class="[^"]*(?:specValue|_341NwK|_1vC4OE)[^"]*"[^>]*>([\s\S]*?)<\/div>/i);
+        if (labelMatch && valueMatch) {
+            const label = labelMatch[1].replace(/<[^>]+>/g, '').trim();
+            const value = valueMatch[1].replace(/<[^>]+>/g, '').trim();
+            if (label && value && !seenSpecs.has(label)) {
+                specs.push(`${label}: ${value}`);
+                seenSpecs.add(label);
+            }
+        }
+    }
+    
+    // Method 3: Extract highlights from the "Highlights" section
+    if (specs.length < 3) {
+        const highlightPatterns = [
+            /<li class="[^"]*(?:_21A10W|_2cM2V8|highlight)[^"]*">([^<]+)<\/li>/gi,
+            /<li class="[^"]*">([\s\S]{10,100})<\/li>/gi,
+            /<span[^>]*class="[^"]*(?:specHighlight|_1qBb9v)[^"]*"[^>]*>([\s\S]*?)<\/span>/gi,
+        ];
+        
+        for (const pattern of highlightPatterns) {
+            let hMatch;
+            let count = 0;
+            while ((hMatch = pattern.exec(html)) !== null && count < 10) {
+                const text = hMatch[1].replace(/<[^>]+>/g, '').trim();
+                if (text.length > 5 && text.length < 120 && !specs.some(s => s.includes(text.substring(0, 15)))) {
+                    specs.push(text);
+                    count++;
+                }
+            }
+            if (specs.length >= 5) break;
+        }
+    }
+    
+    // Method 4: Extract from spec table/grid pattern (common in mobile/electronics)
+    if (specs.length < 3) {
+        const specRowPattern = /<div[^>]*class="[^"]*(?:spec-row|row)[^"]*"[^>]*>([\s\S]*?)<\/div>/gi;
+        let rowMatch;
+        while ((rowMatch = specRowPattern.exec(html)) !== null && specs.length < 10) {
+            const rowHtml = rowMatch[1];
+            const keyMatch = rowHtml.match(/<div[^>]*>(\s*[A-Z][A-Za-z\s]+\s*)<\/div>/);
+            const valMatch = rowHtml.match(/<div[^>]*>([^<]{5,80})<\/div>/g);
+            if (keyMatch && valMatch && valMatch.length > 1) {
+                const key = keyMatch[1].trim();
+                const val = valMatch[1].replace(/<[^>]+>/g, '').trim();
+                if (!specs.some(s => s.includes(key))) {
+                    specs.push(`${key}: ${val}`);
+                }
+            }
+        }
+    }
+    
+    // Method 5: Extract from common spec key-value patterns in page
+    if (specs.length < 2) {
+        const commonKeys = [
+            "Display Size", "Screen Size", "Resolution", "Processor", 
+            "RAM", "Internal Storage", "ROM", "Battery", "Battery Capacity",
+            "Camera", "Primary Camera", "Front Camera", "Secondary Camera",
+            "Brand", "Color", "Weight", "Network", "SIM"
+        ];
+        
+        commonKeys.forEach(key => {
+            const pattern = new RegExp(
+                `<div[^>]*>\s*${key.replace(/ /g, '\\s*')}\s*</div>\\s*<div[^>]*>\s*([^<]+)\\s*</div>`,
+                'i'
+            );
+            const match = html.match(pattern);
+            if (match) {
+                const val = match[1].replace(/<[^>]+>/g, '').trim();
+                if (val && !specs.some(s => s.includes(key))) {
+                    specs.push(`${key}: ${val}`);
+                }
+            }
+        });
+    }
+    
+    // Method 6: Extract from <meta> tags for additional specs
+    if (specs.length < 2) {
+        const metaSpecs = html.match(/<meta[^>]+name=["']description["'][^>]+content=["']([^'"]+)["']/i);
+        if (metaSpecs) {
+            const desc = metaSpecs[1];
+            // Split description by commas or pipes to get individual specs
+            const descSpecs = desc.split(/[,|]/).map(s => s.trim()).filter(s => s.length > 3 && s.length < 100);
+            descSpecs.forEach(s => {
+                if (!specs.some(sp => sp.includes(s.substring(0, 10)))) {
+                    specs.push(s);
+                }
+            });
+        }
+    }
+    
+    return specs;
+}
+
+function extractImages(html) {
+    let images = [];
+    
+    // Method 1: Extract from JSON-LD Schema.org metadata (most reliable for high-res)
+    try {
         const ldJsonRegex = /<script[^>]*type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/gi;
         let ldMatch;
         while ((ldMatch = ldJsonRegex.exec(html)) !== null) {
@@ -379,8 +654,11 @@ app.post('/api/fetch-product-details', (req, res) => {
                     if (item['@type'] === 'Product' && item.image) {
                         const imgList = Array.isArray(item.image) ? item.image : [item.image];
                         imgList.forEach(img => {
-                            const highRes = img.replace('/image/1500/1500/', '/image/832/832/').split('?')[0];
-                            if (!images.includes(highRes) && images.length < 8) {
+                            const highRes = img.replace(/\/image\/\d+\/\d+\//, '/image/832/832/')
+                                               .replace(/\/image\/\d+\/\d+\//, '/image/832/832/')
+                                               .replace('rukmini1.flixcart.com', 'rukminim2.flixcart.com')
+                                               .split('?')[0];
+                            if (!images.includes(highRes) && highRes.includes('rukminim') && images.length < 8) {
                                 images.push(highRes);
                             }
                         });
@@ -388,11 +666,180 @@ app.post('/api/fetch-product-details', (req, res) => {
                 }
             } catch (e) {}
         }
+    } catch (e) {}
+    
+    // Method 2: Extract from og:image meta tags
+    if (images.length < 2) {
+        const ogImageRegex = /<meta[^>]+property=["']og:image["'][^>]+content=["']([^'"]+)["']/gi;
+        let ogMatch;
+        while ((ogMatch = ogImageRegex.exec(html)) !== null) {
+            let img = ogMatch[1];
+            if (img.startsWith('//')) img = 'https:' + img;
+            img = img.replace(/\/image\/\d+\/\d+\//, '/image/832/832/').split('?')[0];
+            if (!images.includes(img) && images.length < 8) {
+                images.push(img);
+            }
+        }
+    }
+    
+    // Method 3: Fallback - extract from CDN URLs in HTML
+    if (images.length === 0) {
+        const imgRegex = /https:\/\/rukminim2\.flixcart\.com\/image\/\d+\/\d+\/([a-z0-9\-]+)\/[a-z0-9\-]+\/[a-z0-9\/_\.\-\?]+/gi;
+        let match;
+        const categoryCounts = {};
+        const tempImages = [];
+        imgRegex.lastIndex = 0;
+        while ((match = imgRegex.exec(html)) !== null) {
+            const fullUrl = match[0];
+            const categoryFolder = match[1];
+            if (fullUrl.includes('-original-') || fullUrl.includes('-enriched-')) {
+                const highRes = fullUrl.replace(/\/image\/\d+\/\d+\//, '/image/832/832/').split('?')[0];
+                if (!highRes.includes('placeholder') && !highRes.includes('logo')) {
+                    tempImages.push({ url: highRes, cat: categoryFolder });
+                    categoryCounts[categoryFolder] = (categoryCounts[categoryFolder] || 0) + 1;
+                }
+            }
+        }
+        let mainCategory = '';
+        let maxCount = 0;
+        for (const cat in categoryCounts) {
+            if (categoryCounts[cat] > maxCount) {
+                maxCount = categoryCounts[cat];
+                mainCategory = cat;
+            }
+        }
+        tempImages.forEach(item => {
+            if (item.cat === mainCategory && !images.includes(item.url) && images.length < 8) {
+                images.push(item.url);
+            }
+        });
+    }
+    
+    return images;
+}
 
-        res.json({ success: true, name, mrp, specs: [], images });
-    });
+// ============================================================
+// API ENDPOINT: Fetch Product Details via Browserless.io
+// ============================================================
+app.post('/api/fetch-product-details', async (req, res) => {
+    const { url } = req.body;
+    if (!url) {
+        return res.status(400).json({ error: 'URL is required.' });
+    }
+
+    try {
+        console.log(`Step 1: Scraping details for URL: ${url}`);
+        
+        // Fetch rendered HTML via Browserless.io
+        let html = '';
+        try {
+            html = await fetchWithBrowserless(url);
+            console.log(`Browserless returned ${html.length} bytes of HTML`);
+        } catch (browserlessError) {
+            console.error('Browserless fetch failed:', browserlessError.message);
+            return res.status(500).json({ 
+                error: 'Failed to fetch page via Browserless. Please check BROWSERLESS_URL and BROWSERLESS_TOKEN environment variables.',
+                details: browserlessError.message
+            });
+        }
+
+        // Extract all data from rendered HTML
+        const name = extractProductName(html);
+        const mrp = extractMRP(html);
+        const specs = extractSpecifications(html);
+        const images = extractImages(html);
+
+        console.log(`Scraped details: name: "${name}", MRP: ₹${mrp}, Images: ${images.length}, Specs: ${specs.length}`);
+        
+        res.json({
+            success: true,
+            name,
+            mrp,
+            specs,
+            images
+        });
+    } catch (e) {
+        console.error('Error during scraping:', e);
+        res.status(500).json({ error: 'Server error during scraping.' });
+    }
 });
 
-app.listen(PORT, '0.0.0.0', () => {
+// API Endpoint: Save auto-scraped product
+app.post('/api/save-product-auto', async (req, res) => {
+    try {
+        const { name, mrp, category, sellingPrice, specs, images } = req.body;
+        
+        if (!name || !category || !sellingPrice) {
+            return res.status(400).json({ error: 'Name, Category, and Target Selling Price are required.' });
+        }
+
+        // Download external images locally
+        const localImages = [];
+        if (images && images.length > 0) {
+            for (let i = 0; i < images.length; i++) {
+                const ext = path.extname(images[i].split('?')[0]) || '.png';
+                const filename = `auto-${Date.now()}-${i}${ext}`;
+                const destPath = path.join(imagesDir, filename);
+                try {
+                    await downloadExternalImage(images[i], destPath);
+                    localImages.push('images/' + filename);
+                } catch (err) {
+                    console.error(`Failed to download image ${i}:`, err);
+                }
+            }
+        }
+
+        let parsedPrice = parseInt(String(sellingPrice).replace(/[^0-9]/g, ''), 10);
+        let parsedOriginalPrice = mrp ? parseInt(String(mrp).replace(/[^0-9]/g, ''), 10) : parsedPrice;
+
+        if (isNaN(parsedPrice)) {
+            return res.status(400).json({ error: 'Invalid selling price numeric format.' });
+        }
+
+        // Apply auto-swap rule: MRP should be higher than Selling Price
+        if (parsedOriginalPrice < parsedPrice) {
+            const temp = parsedPrice;
+            parsedPrice = parsedOriginalPrice;
+            parsedOriginalPrice = temp;
+        }
+
+        // Calculate discount
+        const pDiff = parsedOriginalPrice - parsedPrice;
+        const discount = parsedOriginalPrice > 0 ? Math.round((pDiff / parsedOriginalPrice) * 100) : 0;
+
+        const newProduct = {
+            id: Date.now(),
+            name: name.trim(),
+            category: category.trim(),
+            price: parsedPrice,
+            original_price: parsedOriginalPrice,
+            discount: discount,
+            image: localImages[0] || 'images/default.png',
+            images: localImages,
+            specs: specs || []
+        };
+
+        const productsPath = path.join(__dirname, 'products.json');
+        let products = [];
+        if (fs.existsSync(productsPath)) {
+            const content = fs.readFileSync(productsPath, 'utf8').trim();
+            if (content) {
+                products = JSON.parse(content);
+            }
+        }
+
+        products.push(newProduct);
+        fs.writeFileSync(productsPath, JSON.stringify(products, null, 4), 'utf8');
+
+        res.json({ success: true, message: 'Product auto-saved successfully!', product: newProduct });
+    } catch (e) {
+        console.error('Error saving auto product:', e);
+        res.status(500).json({ error: 'Server error during save.' });
+    }
+});
+
+app.listen(PORT, () => {
     console.log(`Express server running on port ${PORT}...`);
+    console.log(`Browserless endpoint: ${BROWSERLESS_URL}`);
+    console.log(`Admin panel: http://localhost:${PORT}/admin`);
 });
