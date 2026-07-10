@@ -842,6 +842,6 @@ app.post('/api/save-product-auto', async (req, res) => {
 
 app.listen(PORT, () => {
     console.log(`Express server running on port ${PORT}...`);
-    console.log(`Browserless endpoint: ${BROWSERLESS_URL}`);
+    console.log(`Browserless endpoint: ${BROWSERLESS_HOST}`);
     console.log(`Admin panel: http://localhost:${PORT}/admin`);
 });
